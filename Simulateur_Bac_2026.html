@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Simulateur Bac 2026 - Lycée Stanislas</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: #f5f7fa; color: #1f2937; padding: 24px; line-height: 1.5; }
+h1 { font-size: 24px; margin-bottom: 4px; }
+h2 { font-size: 18px; margin: 20px 0 12px; color: #374151; }
+.subtitle { color: #6b7280; margin-bottom: 24px; font-size: 14px; }
+.section { background: white; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.drop-zones { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.drop-zone { border: 2px dashed #d1d5db; border-radius: 8px; padding: 18px; text-align: center; cursor: pointer; background: #f9fafb; transition: all .15s; }
+.drop-zone:hover { border-color: #6366f1; background: #eef2ff; }
+.drop-zone.loaded { border-color: #10b981; background: #ecfdf5; border-style: solid; }
+.drop-zone .label { font-weight: 600; margin-bottom: 4px; }
+.drop-zone .info { font-size: 12px; color: #6b7280; }
+.drop-zone .filename { font-size: 12px; color: #047857; margin-top: 6px; word-break: break-all; }
+input[type=file] { display: none; }
+.btn { display: inline-block; padding: 10px 18px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; }
+.btn:hover { background: #4f46e5; }
+.btn:disabled { background: #d1d5db; cursor: not-allowed; }
+.btn-sec { background: #e5e7eb; color: #374151; }
+.btn-sec:hover { background: #d1d5db; }
+.kpi-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin: 12px 0; }
+.kpi { background: white; padding: 14px; border-radius: 8px; border-left: 4px solid #6366f1; }
+.kpi.tbf { border-color: #7c3aed; }
+.kpi.tb { border-color: #10b981; }
+.kpi.b { border-color: #3b82f6; }
+.kpi.ab { border-color: #06b6d4; }
+.kpi.adm { border-color: #f59e0b; }
+.kpi.oral { border-color: #ef4444; }
+.kpi.ref { border-color: #6b7280; }
+.kpi-label { font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; }
+.kpi-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+.kpi-pct { font-size: 13px; color: #6b7280; }
+.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.filters select, .filters input { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+.filters input { flex: 1; min-width: 200px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 10px 8px; background: #f3f4f6; font-weight: 600; cursor: pointer; user-select: none; position: sticky; top: 0; }
+th:hover { background: #e5e7eb; }
+td { padding: 8px; border-bottom: 1px solid #f3f4f6; }
+tr:hover td { background: #f9fafb; }
+.mention { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; display: inline-block; }
+.m-tbf { background: #ede9fe; color: #6d28d9; }
+.m-tb { background: #d1fae5; color: #065f46; }
+.m-b { background: #dbeafe; color: #1e40af; }
+.m-ab { background: #cffafe; color: #155e75; }
+.m-adm { background: #fef3c7; color: #92400e; }
+.m-oral { background: #fee2e2; color: #991b1b; }
+.m-ref { background: #f3f4f6; color: #4b5563; }
+.m-av { background: #fde68a; color: #78350f; }
+.m-av { background: #fed7aa; color: #9a3412; }
+.warning { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; border-radius: 4px; margin: 12px 0; font-size: 13px; }
+.error { background: #fee2e2; border-left: 4px solid #ef4444; padding: 12px; border-radius: 4px; margin: 12px 0; font-size: 13px; color: #991b1b; }
+.success { background: #d1fae5; border-left: 4px solid #10b981; padding: 12px; border-radius: 4px; margin: 12px 0; font-size: 13px; color: #065f46; }
+.muted { color: #6b7280; font-size: 12px; }
+.detail { font-family: ui-monospace, monospace; font-size: 11px; background: #f9fafb; padding: 8px; border-radius: 4px; margin-top: 6px; max-height: 200px; overflow-y: auto; }
+.modal-bg { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 100; }
+.modal-bg.active { display: flex; }
+.modal { background: white; border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+.modal h3 { margin-bottom: 12px; }
+.close-btn { float: right; cursor: pointer; color: #6b7280; font-size: 20px; }
+.tab-row { display: flex; border-bottom: 1px solid #e5e7eb; margin-bottom: 12px; }
+.tab { padding: 8px 16px; cursor: pointer; border-bottom: 3px solid transparent; }
+.tab.active { border-color: #6366f1; color: #4f46e5; font-weight: 600; }
+.notes-grid { display: grid; grid-template-columns: 1fr 80px; gap: 8px; align-items: center; }
+.notes-grid label { font-size: 13px; }
+.notes-grid input { padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>Simulateur Bac 2026 — Lycée Stanislas (Cannes)</h1>
+<div class="subtitle">Estimation des mentions au baccalauréat à partir des notes Pronote et de l'extraction EAF.</div>
+
+<div class="section">
+<h2>1. Charger les fichiers</h2>
+<div class="muted" style="margin-bottom: 10px;">Les fichiers sont relus à chaque clic — déposez la dernière version du Récapitulatif Pronote pour avoir les moyennes à jour.</div>
+<div class="drop-zones">
+  <div class="drop-zone" id="dz-eaf" onclick="document.getElementById('f-eaf').click()">
+    <div class="label">EAF — Notes 1ère + Français</div>
+    <div class="info">Fichier "Extraire Notes" du SIEC<br>(extraction juillet 2025)</div>
+    <div class="filename" id="fn-eaf"></div>
+  </div>
+  <div class="drop-zone" id="dz-tg" onclick="document.getElementById('f-tg').click()">
+    <div class="label">Récap Terminales Générales</div>
+    <div class="info">Moyennes année (Pronote)<br>Toutes les T1–T6</div>
+    <div class="filename" id="fn-tg"></div>
+  </div>
+  <div class="drop-zone" id="dz-stmg" onclick="document.getElementById('f-stmg').click()">
+    <div class="label">Récap Terminale STMG</div>
+    <div class="info">Moyennes année (Pronote)<br>Optionnel</div>
+    <div class="filename" id="fn-stmg"></div>
+  </div>
+</div>
+<input type="file" id="f-eaf" accept=".xlsx,.xls" onchange="loadFile('eaf', this.files[0])">
+<input type="file" id="f-tg" accept=".xlsx,.xls" onchange="loadFile('tg', this.files[0])">
+<input type="file" id="f-stmg" accept=".xlsx,.xls" onchange="loadFile('stmg', this.files[0])">
+<div style="margin-top: 16px;">
+  <button class="btn" id="btn-run" onclick="runSimulation()" disabled>Lancer la simulation</button>
+  <span id="status-msg" class="muted" style="margin-left: 12px;"></span>
+</div>
+</div>
+
+<div id="results-section" style="display: none;">
+
+<div class="section">
+<h2>2. Synthèse des mentions</h2>
+<div id="kpi-container"></div>
+<div id="warning-container"></div>
+</div>
+
+<div class="section">
+<h2>3. Tableau des élèves</h2>
+<div class="filters">
+  <select id="f-classe" onchange="renderTable()"><option value="">Toutes les classes</option></select>
+  <select id="f-mention" onchange="renderTable()">
+    <option value="">Toutes les mentions</option>
+    <option value="TRES BIEN FELICITATIONS">TB Félicitations</option>
+    <option value="TRES BIEN">Très Bien</option>
+    <option value="BIEN">Bien</option>
+    <option value="ASSEZ BIEN">Assez Bien</option>
+    <option value="ADMIS">Admis</option>
+    <option value="ORAL">Oral</option>
+    <option value="REFUSE">Refusé</option>
+    <option value="A VERIFIER">À vérifier</option>
+  </select>
+  <input type="text" id="f-search" placeholder="Rechercher un nom…" oninput="renderTable()">
+  <button class="btn-sec btn" onclick="exportCSV()">Exporter CSV</button>
+</div>
+<div style="max-height: 600px; overflow-y: auto;">
+<table id="results-table">
+<thead><tr>
+  <th onclick="sortBy('nom')">Nom</th>
+  <th onclick="sortBy('prenom')">Prénom</th>
+  <th onclick="sortBy('classe')">Classe</th>
+  <th onclick="sortBy('total')">Points / 2000</th>
+  <th onclick="sortBy('total')">Moyenne / 20</th>
+  <th>Mention</th>
+  <th>Détail</th>
+</tr></thead>
+<tbody id="results-tbody"></tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+<div class="modal-bg" id="modal" onclick="if(event.target===this)closeModal()">
+<div class="modal">
+<span class="close-btn" onclick="closeModal()">×</span>
+<div id="modal-content"></div>
+</div>
+</div>
+
+<div class="section">
+<h2>Notes méthodologiques</h2>
+<div class="muted">
+<strong>Coefficients Bac général (TG)</strong> : Fr écrit 5 / Fr oral 5 / Philo 8 / Grand oral 10 / Spé 1 et 2 chacune coef 16 = 60 (épreuves /1200). Contrôle continu : HG, LVA, LVB, Ens. Sci. coef 6 chacune (½ note 1ère + ½ moy. Term), EPS coef 6 (Term seule), EMC coef 2 (½+½), Spé abandonnée coef 8 (note 1ère). Total = 40 (CC /800). Source : SIMUL_BAC.xlsx.<br><br>
+<strong>Coefficients Bac STMG</strong> : Fr écrit 5 / Fr oral 5 / Philo 4 / Grand oral 14 / Droit et économie 16 / MSGN 16 = 60 (épreuves /1200). Contrôle continu identique au TG, mais Mathématiques prend la place d'Enseignement scientifique (coef 6) ; la "spé abandonnée" est Sciences de gestion et numérique de 1ère (coef 8). Source : SIMUL_BAC_STMG.xlsx.<br><br>
+<strong>Grand oral</strong> : pas de note disponible avant l'épreuve. Le simulateur utilise <strong>la note d'oral de Français de 1ère comme proxy</strong>, à défaut d'autre indicateur. À ajuster si besoin.<br><br>
+<strong>Options</strong> (Latin, LVC…) : non encore intégrées dans cette version. Elles ne peuvent que faire monter le total.<br><br>
+<strong>Mentions</strong> : &lt;800 Refusé · 800–999 Oral · 1000–1199 Admis · 1200–1399 Assez Bien · 1400–1599 Bien · 1600–1799 Très Bien · ≥1800 Très Bien Félicitations.<br><br>
+<strong>Sources</strong> : SIMUL_BAC.xlsx (formules de référence), RecapitulatifTG2026.xlsx (Pronote, moyennes année Term), EAF_v2.xlsx (extraction SIEC du 8 juillet 2025).
+</div>
+</div>
+
+<script>
+// ============ STATE ============
+const state = { eaf: null, tg: null, stmg: null, results: [], unmatched: [], aVerifier: [], sortKey: 'nom', sortDir: 1, manualEAF: {} };
+
+// Persistance des saisies manuelles dans localStorage (clé: norm(nom+prenom))
+const LS_KEY = 'simbac_manual_eaf_v1';
+try { state.manualEAF = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (e) { state.manualEAF = {}; }
+function saveManual() { try { localStorage.setItem(LS_KEY, JSON.stringify(state.manualEAF)); } catch (e) {} }
+
+// ============ FILE LOADING ============
+function loadFile(kind, file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      state[kind] = wb;
+      document.getElementById('dz-' + kind).classList.add('loaded');
+      document.getElementById('fn-' + kind).textContent = file.name;
+      updateRunButton();
+    } catch (err) {
+      alert('Erreur de lecture du fichier ' + file.name + ': ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function updateRunButton() {
+  const ok = state.eaf && state.tg;
+  document.getElementById('btn-run').disabled = !ok;
+  document.getElementById('status-msg').textContent = ok ? 'Prêt à simuler' : 'Charger au minimum EAF et Récap TG';
+}
+
+// ============ HELPERS ============
+function norm(s) {
+  if (!s) return '';
+  return String(s).trim().toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/[^A-Z0-9 \-]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+function firstToken(s) { const n = norm(s); return n.split(' ')[0].split('-')[0]; }
+function toNum(v) { if (v == null || v === '') return null; const n = parseFloat(String(v).replace(',', '.')); return isNaN(n) ? null : n; }
+
+function findCol(headers, kws, exclude = []) {
+  for (let i = 0; i < headers.length; i++) {
+    if (!headers[i]) continue;
+    const h = String(headers[i]).toUpperCase();
+    if (exclude.some(e => h.includes(e.toUpperCase()))) continue;
+    if (kws.some(k => h.includes(k.toUpperCase()))) return i;
+  }
+  return -1;
+}
+
+// ============ PARSE RECAP ============
+function parseRecap(wb, isStmg = false) {
+  const sh = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sh, { header: 1, defval: null, raw: true });
+  const HDR = rows[0];
+  // Toutes colonnes EPS (en STMG il y a 4 colonnes, on prendra la première non-null par élève)
+  const epsAll = [];
+  for (let i = 0; i < HDR.length; i++) {
+    if (HDR[i] && /ED\.PHYSIQUE|EPS/i.test(String(HDR[i]))) epsAll.push(i);
+  }
+  const COLS = {
+    philo: findCol(HDR, ['PHILO'], ['HUMAN']),
+    hggsp: findCol(HDR, ['HGGSP', 'GEOPOL']),
+    hlp: findCol(HDR, ['HUMAN']),
+    maths_spe: findCol(HDR, ['MATHEMATIQUES'], ['COMP', 'EXP']),
+    nsi: findCol(HDR, ['NUMERIQUE', 'NSI']),
+    phys: findCol(HDR, ['PHYSIQUE']),
+    ses: findCol(HDR, ['ECON'], ['DROIT']),
+    svt: findCol(HDR, ['SCIENCES VIE']),
+    hg: findCol(HDR, ['HISTOIRE-GEOG'], ['ITALIEN', 'GEOPOL']),
+    ens_sci: findCol(HDR, ['ENSEIGN.SCIENT']),
+    ang: findCol(HDR, ['ANGLAIS']),
+    ita: findCol(HDR, ['ITALIEN'], ['HIST']),
+    esp: findCol(HDR, ['ESPAGNOL']),
+    all: findCol(HDR, ['ALLEMAND']),
+    eps: epsAll[0] !== undefined ? epsAll[0] : -1,
+    emc: findCol(HDR, ['ENS. MORAL', 'CIVIQUE']),
+    rus: findCol(HDR, ['RUSSE']),
+    maths_co: findCol(HDR, ['MATHS COMPL']),
+    maths_exp: findCol(HDR, ['MATHS EXP']),
+    latin: findCol(HDR, ['LATIN']),
+    // STMG specific
+    droit_eco: findCol(HDR, ['DROIT', 'ECONO']),
+    msgn: findCol(HDR, ['MSGN', 'GESTION-FINANCE', 'MANAGEMENT']),
+  };
+  const SPE_KEYS = ['hggsp', 'hlp', 'maths_spe', 'nsi', 'phys', 'ses', 'svt'];
+  const out = [];
+  for (let i = 4; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || !r[1]) continue;
+    const s = String(r[1]).trim();
+    if (/Service de notation|Groupes|Coefficients|^Moyenne|^%|^Edité/i.test(s)) continue;
+    let np, cls;
+    if (isStmg) {
+      // Format STMG : "BISIAUX FAUSTINE" sans parenthèse, classe unique TSTMG
+      np = s; cls = 'TSTMG';
+    } else {
+      const m = s.match(/^(.+?)\s*\(Terminale\s*([^)]+)\)\s*$/);
+      if (!m) continue;
+      np = m[1].trim(); cls = 'T' + m[2].trim();
+    }
+    const parts = np.split(/\s+/);
+    let nomT = [], prenomT = [], seenLower = false;
+    for (const p of parts) {
+      const isUp = p === p.toUpperCase() && /[A-Za-zÀ-ÿ]/.test(p);
+      if (!seenLower && isUp) nomT.push(p); else { seenLower = true; prenomT.push(p); }
+    }
+    const nom = nomT.join(' '), prenom = prenomT.join(' ');
+    const notes = {};
+    for (const k in COLS) notes[k] = COLS[k] >= 0 ? toNum(r[COLS[k]]) : null;
+    // Pour STMG : EPS peut être dans n'importe laquelle des 4 colonnes EPS
+    if (isStmg && notes.eps == null) {
+      for (const idx of epsAll) {
+        const v = toNum(r[idx]);
+        if (v != null) { notes.eps = v; break; }
+      }
+    }
+    // Pour STMG : "maths" (CC) prend la place d'"ens_sci" (cf. SIMUL_BAC_STMG)
+    if (isStmg) {
+      // Cherche colonne MATHEMATIQUES (sans CC ni EXP) dans le récap STMG
+      const mathsIdx = findCol(HDR, ['MATHEMATIQUES'], ['COMP', 'EXP']);
+      if (mathsIdx >= 0) notes.maths_cc = toNum(r[mathsIdx]);
+    }
+    const spes_kept = SPE_KEYS.filter(k => notes[k] != null);
+    out.push({
+      nom, prenom, classe: cls, full: np,
+      key: norm(nom + ' ' + prenom),
+      first_nom: firstToken(nom), first_prenom: firstToken(prenom),
+      notes_T: notes, spes_kept, is_stmg: isStmg
+    });
+  }
+  return out;
+}
+
+// ============ PARSE EAF ============
+function parseEAF(wb) {
+  const sh = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sh, { header: 1, defval: null, raw: true });
+  // Find header row (looks for "Nom candidat")
+  let hi = -1;
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    if (rows[i] && rows[i].some(c => c && String(c).includes('Nom candidat'))) { hi = i; break; }
+  }
+  if (hi < 0) throw new Error('Header EAF introuvable');
+  const HDR = rows[hi];
+  const COLS = {
+    qual: findCol(HDR, ['Qualification']),
+    div: findCol(HDR, ['Division']),
+    nom: findCol(HDR, ['Nom candidat']),
+    prenom: findCol(HDR, ['Prénom candidat']),
+    hg_1: findCol(HDR, ['LP001']),
+    emc_1: findCol(HDR, ['LP002']),
+    lva_1: findCol(HDR, ['LP003']),
+    ens_sci_1: findCol(HDR, ['LP005']),
+    maths_1: findCol(HDR, ['LP006']),
+    hggsp_1: findCol(HDR, ['LP012']),
+    hlp_1: findCol(HDR, ['LP013']),
+    maths_spe_1: findCol(HDR, ['LP014']),
+    nsi_1: findCol(HDR, ['LP015']),
+    phys_1: findCol(HDR, ['LP016']),
+    svt_1: findCol(HDR, ['LP017']),
+    ses_1: findCol(HDR, ['LP019']),
+    sgsi_1: findCol(HDR, ['LP025']),
+    fr_ecrit: findCol(HDR, ['T001', 'Français écrit']),
+    fr_oral: findCol(HDR, ['T002', 'Français oral']),
+  };
+  const lp004 = []; const lp060 = [];
+  for (let i = 0; i < HDR.length; i++) {
+    if (HDR[i] && String(HDR[i]).includes('LP004')) lp004.push(i);
+    if (HDR[i] && String(HDR[i]).includes('LP060')) lp060.push(i);
+  }
+  const SPE_MAP = { hggsp: 'hggsp_1', hlp: 'hlp_1', maths_spe: 'maths_spe_1', nsi: 'nsi_1', phys: 'phys_1', ses: 'ses_1', svt: 'svt_1' };
+  const eaf = [];
+  for (let i = hi + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || !r[COLS.nom]) continue;
+    const nom = String(r[COLS.nom]).trim();
+    const prenom = COLS.prenom >= 0 && r[COLS.prenom] ? String(r[COLS.prenom]).trim() : '';
+    const div = COLS.div >= 0 && r[COLS.div] ? String(r[COLS.div]) : '';
+    const qual = COLS.qual >= 0 && r[COLS.qual] ? String(r[COLS.qual]) : '';
+    const isStmg = qual.toUpperCase().includes('STMG') || div.toUpperCase().includes('STMG');
+    const notes = {};
+    for (const k in COLS) {
+      if (['qual', 'div', 'nom', 'prenom'].includes(k)) continue;
+      notes[k] = COLS[k] >= 0 ? toNum(r[COLS[k]]) : null;
+    }
+    let lvb = null, lvbKind = null;
+    for (const idx of lp004) {
+      const v = toNum(r[idx]);
+      if (v != null) {
+        lvb = v;
+        const h = String(HDR[idx] || '').toUpperCase();
+        lvbKind = h.includes('ALLEM') ? 'all' : h.includes('ESPAG') ? 'esp' : h.includes('ITAL') ? 'ita' : 'lvb';
+        break;
+      }
+    }
+    notes.lvb_1 = lvb; notes.lvb_1_kind = lvbKind;
+    notes.lp060 = lp060.map(idx => toNum(r[idx])).filter(v => v != null);
+    const spes_eaf = Object.keys(SPE_MAP).filter(k => notes[SPE_MAP[k]] != null);
+    eaf.push({
+      nom, prenom, key: norm(nom + ' ' + prenom),
+      first_nom: firstToken(nom), first_prenom: firstToken(prenom),
+      div, notes_1: notes, spes_eaf, is_stmg: isStmg,
+      fr_ecrit: notes.fr_ecrit, fr_oral: notes.fr_oral
+    });
+  }
+  return eaf;
+}
+
+// ============ MATCHING ============
+function matchStudent(s, eafList) {
+  const byKey = new Map(eafList.map(e => [e.key, e]));
+  let e = byKey.get(s.key);
+  if (e) return { eaf: e, method: 'exact' };
+  const c1 = eafList.filter(x => x.first_nom === s.first_nom && x.first_prenom === s.first_prenom);
+  if (c1.length === 1) return { eaf: c1[0], method: 'first-token' };
+  const c2 = eafList.filter(x => x.first_nom === s.first_nom);
+  if (c2.length === 1) return { eaf: c2[0], method: 'first-nom-unique' };
+  return { eaf: null, method: null };
+}
+
+// ============ CALCUL ============
+const COEF_TG = { fr_ecrit: 5, fr_oral: 5, philo: 8, grand_oral: 10, spe1: 16, spe2: 16,
+  hg: 6, lva: 6, lvb: 6, ens_sci: 6, eps: 6, emc: 2, spe_drop: 8 };
+const COEF_STMG = { ...COEF_TG, philo: 4, grand_oral: 14 };
+const SPE_MAP = { hggsp: 'hggsp_1', hlp: 'hlp_1', maths_spe: 'maths_spe_1', nsi: 'nsi_1', phys: 'phys_1', ses: 'ses_1', svt: 'svt_1' };
+const SPE_LIBS = { hggsp: 'HGGSP', hlp: 'HLP', maths_spe: 'Maths Spé', nsi: 'NSI', phys: 'Physique-Chimie', ses: 'SES', svt: 'SVT' };
+
+function mentionFor(pts) {
+  if (pts >= 1800) return 'TRES BIEN FELICITATIONS';
+  if (pts >= 1600) return 'TRES BIEN';
+  if (pts >= 1400) return 'BIEN';
+  if (pts >= 1200) return 'ASSEZ BIEN';
+  if (pts >= 1000) return 'ADMIS';
+  if (pts >= 800) return 'ORAL';
+  return 'REFUSE';
+}
+
+function calcEleve(s) {
+  const e = s.eaf; const n1 = e.notes_1; const nT = s.notes_T;
+  const COEF = s.is_stmg ? COEF_STMG : COEF_TG;
+  let pts_ep = 0, pts_cc = 0; const pieces = []; const missing = [];
+  function add(label, note, coef, pts) { pieces.push({ label, note, coef, pts }); }
+
+  // ===== Épreuves terminales =====
+  if (e.fr_ecrit == null) missing.push('Fr écrit'); else { const p = e.fr_ecrit * COEF.fr_ecrit; pts_ep += p; add('Fr écrit', e.fr_ecrit, COEF.fr_ecrit, p); }
+  if (e.fr_oral == null) missing.push('Fr oral'); else { const p = e.fr_oral * COEF.fr_oral; pts_ep += p; add('Fr oral', e.fr_oral, COEF.fr_oral, p); }
+  if (nT.philo == null) missing.push('Philo'); else { const p = nT.philo * COEF.philo; pts_ep += p; add('Philosophie', nT.philo, COEF.philo, p); }
+  // Grand oral = proxy Fr oral 1ere
+  if (e.fr_oral == null) missing.push('Grand oral (proxy)'); else { const p = e.fr_oral * COEF.grand_oral; pts_ep += p; add('Grand oral (proxy)', e.fr_oral, COEF.grand_oral, p); }
+
+  if (!s.is_stmg) {
+    // === TG : 2 spécialités conservées ===
+    const spes = s.spes_kept;
+    if (spes.length < 2) missing.push('Spés conservées (' + spes.length + ')');
+    spes.slice(0, 2).forEach((sp, i) => {
+      const v = nT[sp];
+      if (v == null) missing.push('Spé ' + (i + 1) + ' (' + sp + ')');
+      else { const p = v * COEF.spe1; pts_ep += p; add('Spé ' + (i + 1) + ' (' + SPE_LIBS[sp] + ')', v, COEF.spe1, p); }
+    });
+  } else {
+    // === STMG : Droit & économie + MSGN/Gestion-Finance ===
+    if (nT.droit_eco == null) missing.push('Droit et économie'); else { const p = nT.droit_eco * COEF.spe1; pts_ep += p; add('Spé 1 (Droit et économie)', nT.droit_eco, COEF.spe1, p); }
+    if (nT.msgn == null) missing.push('MSGN/Gestion-Finance'); else { const p = nT.msgn * COEF.spe2; pts_ep += p; add('Spé 2 (MSGN/Gestion-Finance)', nT.msgn, COEF.spe2, p); }
+  }
+
+  // ===== Contrôle continu =====
+  function ccPair(label, n1v, nTv, c1, c2) {
+    if (n1v == null || nTv == null) { missing.push(label + ' incomplet'); return; }
+    const p = n1v * c1 + nTv * c2; pts_cc += p; add(label, '1:' + n1v + ' / T:' + nTv, c1 + c2, p);
+  }
+  ccPair('Histoire-Géo', n1.hg_1, nT.hg, 3, 3);
+  ccPair('LVA Anglais', n1.lva_1, nT.ang, 3, 3);
+  const lvbKind = n1.lvb_1_kind;
+  ccPair('LVB ' + (lvbKind || ''), n1.lvb_1, lvbKind ? nT[lvbKind] : null, 3, 3);
+  if (!s.is_stmg) {
+    // TG : Enseignement scientifique
+    ccPair('Ens. Scientifique', n1.ens_sci_1, nT.ens_sci, 3, 3);
+  } else {
+    // STMG : Maths (occupe le slot d'Ens Sci selon SIMUL_BAC_STMG)
+    ccPair('Mathématiques', n1.maths_1, nT.maths_cc, 3, 3);
+  }
+  if (nT.eps == null) missing.push('EPS Term'); else { const p = nT.eps * 6; pts_cc += p; add('EPS', 'T:' + nT.eps, 6, p); }
+  ccPair('EMC', n1.emc_1, nT.emc, 1, 1);
+
+  if (!s.is_stmg) {
+    // TG : Spé abandonnée
+    const dropped = s.spes_dropped || [];
+    if (dropped.length === 0) missing.push('Spé abandonnée non identifiée');
+    else {
+      const sp = dropped[0]; const v = n1[SPE_MAP[sp]];
+      if (v == null) missing.push('Spé abandonnée 1ère (' + sp + ')');
+      else { const p = v * 8; pts_cc += p; add('Spé abandonnée (' + SPE_LIBS[sp] + ')', v, 8, p); }
+    }
+  } else {
+    // STMG : Sciences de gestion et numérique (note 1ère LP025) × 8
+    const v = n1.sgsi_1;
+    if (v == null) missing.push('Sciences de gestion et numérique 1ère');
+    else { const p = v * 8; pts_cc += p; add('Sciences de gestion et numérique (1ère)', v, 8, p); }
+  }
+  const total = pts_ep + pts_cc;
+  return {
+    nom: s.nom, prenom: s.prenom, classe: s.classe,
+    pts_ep: Math.round(pts_ep * 100) / 100, pts_cc: Math.round(pts_cc * 100) / 100,
+    total: Math.round(total * 100) / 100, mention: mentionFor(total),
+    missing, pieces, is_stmg: s.is_stmg, a_verifier: false
+  };
+}
+
+// ============ RUN ============
+function runSimulation() {
+  try {
+    document.getElementById('status-msg').textContent = 'Calcul en cours…';
+    const eaf = parseEAF(state.eaf);
+    const eafG = eaf.filter(e => !e.is_stmg);
+    const eafS = eaf.filter(e => e.is_stmg);
+    const recapTG = parseRecap(state.tg, false);
+    const recapSTMG = state.stmg ? parseRecap(state.stmg, true) : [];
+
+    const results = []; const unmatched = [];
+    // TG
+    for (const s of recapTG) {
+      const m = matchStudent(s, eafG);
+      if (!m.eaf) { unmatched.push({ ...s, reason: 'aucun match EAF' }); continue; }
+      s.eaf = m.eaf;
+      const seEaf = new Set(m.eaf.spes_eaf), skKept = new Set(s.spes_kept);
+      s.spes_dropped = [...seEaf].filter(x => !skKept.has(x));
+      // Cas atypique
+      const isAtyp = !(seEaf.size === 3 && skKept.size === 2 && s.spes_dropped.length === 1);
+      if (isAtyp) {
+        results.push({
+          nom: s.nom, prenom: s.prenom, classe: s.classe,
+          a_verifier: true, reason: 'Cas atypique sur les spés (EAF: ' + [...seEaf].join(',') + ' / Term: ' + [...skKept].join(',') + ')',
+          total: null, mention: 'A VERIFIER', missing: [], pieces: []
+        });
+        continue;
+      }
+      results.push(calcEleve(s));
+    }
+    // STMG
+    for (const s of recapSTMG) {
+      const m = matchStudent(s, eafS);
+      if (!m.eaf) { unmatched.push({ ...s, reason: 'aucun match EAF' }); continue; }
+      s.eaf = m.eaf; s.spes_dropped = [];
+      results.push(calcEleve(s));
+    }
+
+    // Intégrer les saisies manuelles : pour chaque unmatched ayant une fiche manuelle, on calcule
+    const stillUnmatched = [];
+    for (const u of unmatched) {
+      const key = u.key;
+      const m = state.manualEAF[key];
+      if (m && m.eaf) {
+        u.eaf = m.eaf;
+        if (!u.is_stmg) u.spes_dropped = [m.eaf.dropped_spe].filter(Boolean);
+        else u.spes_dropped = [];
+        const r = calcEleve(u);
+        r.manual = true;
+        results.push(r);
+      } else {
+        stillUnmatched.push(u);
+      }
+    }
+
+    state.results = results; state.unmatched = stillUnmatched;
+    document.getElementById('status-msg').textContent = '✓ Simulation effectuée — ' + results.length + ' élèves calculés';
+    document.getElementById('results-section').style.display = 'block';
+    renderKPIs(); renderWarnings(); populateClasseFilter(); renderTable();
+  } catch (err) {
+    document.getElementById('status-msg').textContent = '⚠ Erreur : ' + err.message;
+    console.error(err);
+  }
+}
+
+function renderKPIs() {
+  const counts = {};
+  state.results.forEach(r => { const m = r.mention; counts[m] = (counts[m] || 0) + 1; });
+  const total = state.results.length;
+  const order = [
+    ['TRES BIEN FELICITATIONS', 'TBF', 'tbf'],
+    ['TRES BIEN', 'TB', 'tb'],
+    ['BIEN', 'Bien', 'b'],
+    ['ASSEZ BIEN', 'Assez B.', 'ab'],
+    ['ADMIS', 'Admis', 'adm'],
+    ['ORAL', 'Oral', 'oral'],
+    ['REFUSE', 'Refusé', 'ref'],
+  ];
+  let html = '<div class="kpi-row">';
+  for (const [k, lib, cls] of order) {
+    const n = counts[k] || 0;
+    const pct = total ? (n * 100 / total).toFixed(1) : '0.0';
+    html += `<div class="kpi ${cls}"><div class="kpi-label">${lib}</div><div class="kpi-value">${n}</div><div class="kpi-pct">${pct}%</div></div>`;
+  }
+  html += '</div>';
+  if (counts['A VERIFIER']) html += `<div class="warning">⚠ ${counts['A VERIFIER']} élève(s) en "à vérifier" (cas atypique sur les spécialités)</div>`;
+  html += `<div class="muted" style="margin-top: 8px;">Total calculé : <strong>${total}</strong> élèves</div>`;
+  document.getElementById('kpi-container').innerHTML = html;
+}
+
+function renderWarnings() {
+  let html = '';
+  if (state.unmatched.length) {
+    html += '<div class="warning"><strong>' + state.unmatched.length + ' élève(s) sans dossier EAF</strong> (nouveaux à Stanislas — saisir les notes 1ère et le bac de Français pour calculer la mention) :<br><div style="margin-top:8px; display: flex; flex-wrap: wrap; gap: 6px;">';
+    for (let i = 0; i < state.unmatched.length; i++) {
+      const u = state.unmatched[i];
+      html += `<button class="btn btn-sec" style="font-size:12px; padding: 4px 10px;" onclick="openManualEntry(${i})">${u.nom} ${u.prenom} (${u.classe}) — Saisir notes</button>`;
+    }
+    html += '</div>';
+    html += '<div style="margin-top:10px; font-size:12px;"><button class="btn btn-sec" onclick="exportManual()" style="padding: 4px 10px; font-size: 12px;">Exporter saisies (JSON)</button> ';
+    html += '<label class="btn btn-sec" style="padding: 4px 10px; font-size: 12px; cursor: pointer;">Importer saisies <input type="file" accept=".json" onchange="importManual(this.files[0])" style="display:none"></label>';
+    html += ' <button class="btn btn-sec" onclick="resetManual()" style="padding: 4px 10px; font-size: 12px;">Réinitialiser saisies</button></div>';
+    html += '</div>';
+  }
+  document.getElementById('warning-container').innerHTML = html;
+}
+
+// ============ SAISIE MANUELLE ============
+function openManualEntry(idx) {
+  const u = state.unmatched[idx];
+  const key = u.key;
+  const existing = state.manualEAF[key]?.eaf || {};
+  const isStmg = u.is_stmg;
+  const SPE_OPTS = [['hggsp','HGGSP'],['hlp','HLP'],['maths_spe','Maths Spé'],['nsi','NSI'],['phys','Physique-Chimie'],['ses','SES'],['svt','SVT']];
+  const LVB_OPTS = [['all','Allemand'],['esp','Espagnol'],['ita','Italien']];
+  const num = (id, lbl, val) => `<div style="margin-bottom:8px;"><label style="display:inline-block; width:230px; font-size:13px;">${lbl}</label><input type="number" step="0.01" min="0" max="20" id="${id}" value="${val ?? ''}" style="width:80px; padding: 4px 8px; border:1px solid #d1d5db; border-radius:4px;"></div>`;
+  const sel = (id, lbl, opts, val) => `<div style="margin-bottom:8px;"><label style="display:inline-block; width:230px; font-size:13px;">${lbl}</label><select id="${id}" style="padding: 4px 8px; border:1px solid #d1d5db; border-radius:4px;"><option value="">—</option>${opts.map(([v,l])=>`<option value="${v}" ${val===v?'selected':''}>${l}</option>`).join('')}</select></div>`;
+
+  let body = `<h3>${u.nom} ${u.prenom} <span class="muted">(${u.classe})</span> — saisie des notes</h3>`;
+  body += '<div class="muted" style="margin-bottom:14px; font-size:12px;">Renseigner les notes de 1ère (livret scolaire de l\'année précédente) et les notes des épreuves anticipées de Français du bac.</div>';
+  body += '<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px;">';
+  body += '<div><h4 style="margin-bottom:8px; font-size:14px;">Notes de 1ère (Contrôle continu)</h4>';
+  body += num('me_hg_1', 'Histoire-Géographie', existing.notes_1?.hg_1);
+  body += num('me_emc_1', 'EMC', existing.notes_1?.emc_1);
+  body += num('me_lva_1', 'LVA Anglais', existing.notes_1?.lva_1);
+  body += sel('me_lvb_kind', 'LVB (langue)', LVB_OPTS, existing.notes_1?.lvb_1_kind);
+  body += num('me_lvb_1', 'LVB (note)', existing.notes_1?.lvb_1);
+  if (!isStmg) {
+    body += num('me_ens_sci_1', 'Enseignement scientifique', existing.notes_1?.ens_sci_1);
+    body += sel('me_dropped_spe', 'Spécialité abandonnée', SPE_OPTS, existing.dropped_spe);
+    body += num('me_dropped_note', 'Note de la spé abandonnée (1ère)', existing.dropped_spe_note);
+  } else {
+    body += num('me_maths_1', 'Mathématiques', existing.notes_1?.maths_1);
+    body += num('me_sgsi_1', 'Sciences de gestion et numérique', existing.notes_1?.sgsi_1);
+  }
+  body += '</div>';
+  body += '<div><h4 style="margin-bottom:8px; font-size:14px;">Bac anticipé Français</h4>';
+  body += num('me_fr_ecrit', 'Français écrit', existing.fr_ecrit);
+  body += num('me_fr_oral', 'Français oral', existing.fr_oral);
+  body += '</div></div>';
+  body += `<div style="margin-top:18px; display:flex; gap:10px;">
+    <button class="btn" onclick="saveManualEntry(${idx})">Enregistrer et calculer</button>
+    <button class="btn btn-sec" onclick="closeModal()">Annuler</button>
+    ${state.manualEAF[key] ? `<button class="btn btn-sec" style="margin-left:auto; color:#991b1b;" onclick="deleteManualEntry(${idx})">Supprimer cette saisie</button>` : ''}
+  </div>`;
+  document.getElementById('modal-content').innerHTML = body;
+  document.getElementById('modal').classList.add('active');
+}
+
+function getNum(id) { const el = document.getElementById(id); if (!el) return null; const v = el.value; return v === '' ? null : parseFloat(v); }
+function getStr(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+
+function saveManualEntry(idx) {
+  const u = state.unmatched[idx];
+  const isStmg = u.is_stmg;
+  const lvbKind = getStr('me_lvb_kind') || null;
+  const lvb_1 = getNum('me_lvb_1');
+  // Construit l'objet eaf compatible avec calcEleve
+  const notes_1 = {
+    hg_1: getNum('me_hg_1'),
+    emc_1: getNum('me_emc_1'),
+    lva_1: getNum('me_lva_1'),
+    lvb_1: lvb_1, lvb_1_kind: lvbKind,
+  };
+  let dropped_spe = null;
+  if (!isStmg) {
+    notes_1.ens_sci_1 = getNum('me_ens_sci_1');
+    dropped_spe = getStr('me_dropped_spe') || null;
+    if (dropped_spe) {
+      // Mappe la note saisie dans la clé _1 attendue par calcEleve
+      const key1 = ({hggsp:'hggsp_1',hlp:'hlp_1',maths_spe:'maths_spe_1',nsi:'nsi_1',phys:'phys_1',ses:'ses_1',svt:'svt_1'})[dropped_spe];
+      notes_1[key1] = getNum('me_dropped_note');
+    }
+  } else {
+    notes_1.maths_1 = getNum('me_maths_1');
+    notes_1.sgsi_1 = getNum('me_sgsi_1');
+  }
+  const fr_ecrit = getNum('me_fr_ecrit');
+  const fr_oral = getNum('me_fr_oral');
+  const eaf = {
+    notes_1, fr_ecrit, fr_oral,
+    spes_eaf: [], is_stmg: isStmg,
+    dropped_spe
+  };
+  state.manualEAF[u.key] = { eaf, dropped_spe, dropped_spe_note: getNum('me_dropped_note') };
+  saveManual();
+  closeModal();
+  runSimulation();
+}
+
+function deleteManualEntry(idx) {
+  const u = state.unmatched[idx];
+  delete state.manualEAF[u.key];
+  saveManual();
+  closeModal();
+  runSimulation();
+}
+
+function exportManual() {
+  const blob = new Blob([JSON.stringify(state.manualEAF, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'saisies_manuelles_bac_2026.json';
+  a.click();
+}
+
+function importManual(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (typeof data !== 'object') throw new Error('Format invalide');
+      state.manualEAF = data;
+      saveManual();
+      runSimulation();
+    } catch (err) { alert('Erreur import : ' + err.message); }
+  };
+  reader.readAsText(file);
+}
+
+function resetManual() {
+  if (!confirm('Effacer toutes les saisies manuelles ?')) return;
+  state.manualEAF = {};
+  saveManual();
+  runSimulation();
+}
+
+function populateClasseFilter() {
+  const sel = document.getElementById('f-classe');
+  const cls = [...new Set(state.results.map(r => r.classe))].sort();
+  sel.innerHTML = '<option value="">Toutes les classes</option>' + cls.map(c => `<option>${c}</option>`).join('');
+}
+
+function sortBy(key) {
+  if (state.sortKey === key) state.sortDir *= -1; else { state.sortKey = key; state.sortDir = 1; }
+  renderTable();
+}
+
+function renderTable() {
+  const cls = document.getElementById('f-classe').value;
+  const ment = document.getElementById('f-mention').value;
+  const search = document.getElementById('f-search').value.toLowerCase();
+  let arr = state.results.filter(r => {
+    if (cls && r.classe !== cls) return false;
+    if (ment && r.mention !== ment) return false;
+    if (search) {
+      const f = (r.nom + ' ' + r.prenom).toLowerCase();
+      if (!f.includes(search)) return false;
+    }
+    return true;
+  });
+  arr.sort((a, b) => {
+    let va = a[state.sortKey], vb = b[state.sortKey];
+    if (va == null) va = state.sortDir > 0 ? 'zzz' : '';
+    if (vb == null) vb = state.sortDir > 0 ? 'zzz' : '';
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * state.sortDir;
+    return String(va).localeCompare(String(vb)) * state.sortDir;
+  });
+  const mClass = m => ({ 'TRES BIEN FELICITATIONS': 'm-tbf', 'TRES BIEN': 'm-tb', 'BIEN': 'm-b', 'ASSEZ BIEN': 'm-ab', 'ADMIS': 'm-adm', 'ORAL': 'm-oral', 'REFUSE': 'm-ref', 'A VERIFIER': 'm-av' }[m] || 'm-ref');
+  const tbody = document.getElementById('results-tbody');
+  tbody.innerHTML = arr.map((r, i) => `
+    <tr>
+      <td>${r.nom}</td>
+      <td>${r.prenom}</td>
+      <td>${r.classe}</td>
+      <td>${r.total != null ? r.total.toFixed(2) : '—'}</td>
+      <td>${r.total != null ? (r.total / 100).toFixed(2) : '—'}</td>
+      <td><span class="mention ${mClass(r.mention)}">${r.mention}</span></td>
+      <td><a href="#" onclick="showDetail(${state.results.indexOf(r)});return false;">Voir</a></td>
+    </tr>
+  `).join('');
+}
+
+function showDetail(idx) {
+  const r = state.results[idx];
+  let html = `<h3>${r.nom} ${r.prenom} <span class="muted">(${r.classe})${r.manual ? ' · Saisie manuelle' : ''}</span></h3>`;
+  if (r.a_verifier) {
+    html += `<div class="error">À VÉRIFIER : ${r.reason}</div>`;
+  } else {
+    const moy = (r.total / 100).toFixed(2);
+    html += `<p><strong>Total : ${r.total}/2000 — ${r.mention} (moyenne ${moy}/20)</strong><br>Épreuves : ${r.pts_ep} / 1200 · Contrôle continu : ${r.pts_cc} / 800</p>`;
+    if (r.missing && r.missing.length) html += `<div class="warning">Notes manquantes : ${r.missing.join(', ')}</div>`;
+    html += '<table style="margin-top:12px;"><thead><tr><th>Épreuve</th><th>Note</th><th>Coef</th><th>Points</th></tr></thead><tbody>';
+    html += r.pieces.map(p => `<tr><td>${p.label}</td><td>${p.note}</td><td>${p.coef}</td><td>${typeof p.pts === 'number' ? p.pts.toFixed(2) : p.pts}</td></tr>`).join('');
+    html += '</tbody></table>';
+    if (r.manual) {
+      html += `<div style="margin-top:14px;"><button class="btn btn-sec" onclick="reopenManualByKey('${(r.nom+' '+r.prenom).replace(/'/g, "\\'")}', '${r.classe}', ${r.is_stmg ? 'true' : 'false'})">Modifier la saisie</button></div>`;
+    }
+  }
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal').classList.add('active');
+}
+
+function reopenManualByKey(fullName, classe, isStmg) {
+  // Crée un objet u temporaire pour openManualEntry
+  const parts = fullName.split(' ');
+  // Cherche dans manualEAF : on a la clé norm(nom+prenom)
+  const key = norm(fullName);
+  const u = { nom: parts[0], prenom: parts.slice(1).join(' '), classe, is_stmg: isStmg, key };
+  // On insère temporairement dans unmatched pour réutiliser openManualEntry(idx)
+  state.unmatched.push(u);
+  openManualEntry(state.unmatched.length - 1);
+  // L'élément reste dans unmatched mais sera nettoyé au prochain runSimulation
+}
+function closeModal() { document.getElementById('modal').classList.remove('active'); }
+
+function exportCSV() {
+  const rows = [['Nom', 'Prénom', 'Classe', 'Points', 'Moyenne /20', 'Mention']];
+  state.results.forEach(r => rows.push([r.nom, r.prenom, r.classe, r.total ?? '', r.total != null ? (r.total / 100).toFixed(2) : '', r.mention]));
+  const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'simulation_bac_2026.csv'; a.click();
+}
+</script>
+</body>
+</html>
