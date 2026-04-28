@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Simulateur Bac 2027 — Élève de Première</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: #f5f7fa; color: #1f2937; padding: 20px; line-height: 1.5; }
+.wrap { max-width: 1280px; margin: 0 auto; }
+h1 { font-size: 22px; margin-bottom: 4px; }
+h2 { font-size: 16px; margin: 16px 0 10px; color: #374151; }
+h3 { font-size: 13px; margin: 14px 0 6px; color: #4b5563; text-transform: uppercase; letter-spacing: .03em; }
+.subtitle { color: #6b7280; margin-bottom: 18px; font-size: 13px; }
+.section { background: white; border-radius: 8px; padding: 16px 18px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.muted { color: #6b7280; font-size: 12px; }
+.layout { display: grid; grid-template-columns: 360px 1fr; gap: 14px; align-items: start; }
+@media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+.drop-zone { border: 2px dashed #d1d5db; border-radius: 8px; padding: 28px 12px; text-align: center; cursor: pointer; background: #f9fafb; transition: all .15s; }
+.drop-zone:hover, .drop-zone.dragover { border-color: #6366f1; background: #eef2ff; }
+.drop-zone.loaded { border: 1px solid #10b981; background: #ecfdf5; padding: 6px; }
+.drop-zone .icon { font-size: 26px; margin-bottom: 4px; }
+.drop-zone .label { font-weight: 600; font-size: 13px; }
+.drop-zone .info { font-size: 11px; color: #6b7280; margin-top: 4px; }
+.preview { width: 100%; border-radius: 6px; }
+.preview img { width: 100%; max-height: 720px; object-fit: contain; display: block; }
+.preview iframe { width: 100%; height: 720px; border: none; display: block; }
+.btn-clear { margin-top: 6px; padding: 4px 10px; background: #e5e7eb; color: #374151; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 6px; }
+.field-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.field { display: flex; flex-direction: column; gap: 2px; }
+.field label { font-size: 12px; color: #4b5563; font-weight: 500; }
+.field .sub { font-size: 11px; color: #9ca3af; font-weight: normal; }
+.field input, .field select { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; width: 100%; }
+.field input:focus, .field select:focus { outline: 2px solid #6366f1; outline-offset: -1px; border-color: #6366f1; }
+
+.spe-row { display: grid; grid-template-columns: 1fr 110px; gap: 10px; margin-bottom: 8px; align-items: end; }
+.spe-row .field input { text-align: right; font-variant-numeric: tabular-nums; }
+
+.scenarios { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 700px) { .scenarios { grid-template-columns: 1fr; } }
+.scenario { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #fafafa; }
+.scenario.best { border-color: #10b981; background: #ecfdf5; }
+.scenario-title { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+.scenario-drop { font-size: 12px; font-weight: 600; color: #1f2937; margin-bottom: 8px; min-height: 30px; }
+.scenario-mention { margin: 6px 0 8px; }
+.scenario-total { font-size: 12px; color: #4b5563; }
+.scenario-total strong { font-size: 16px; color: #1f2937; }
+.mention { padding: 4px 12px; border-radius: 14px; font-size: 12px; font-weight: 700; display: inline-block; }
+.m-tbf { background: #ede9fe; color: #6d28d9; }
+.m-tb { background: #d1fae5; color: #065f46; }
+.m-b { background: #dbeafe; color: #1e40af; }
+.m-ab { background: #cffafe; color: #155e75; }
+.m-adm { background: #fef3c7; color: #92400e; }
+.m-oral { background: #fee2e2; color: #991b1b; }
+.m-ref { background: #f3f4f6; color: #4b5563; }
+
+.detail { font-size: 11px; margin-top: 8px; }
+.detail-row { display: grid; grid-template-columns: 1fr 38px 38px 50px; padding: 2px 0; border-bottom: 1px dashed #e5e7eb; }
+.detail-row.head { font-weight: 600; color: #6b7280; border-bottom: 1px solid #d1d5db; }
+.detail-row .num { text-align: right; font-variant-numeric: tabular-nums; }
+.detail-row.miss { color: #9a3412; }
+details summary { cursor: pointer; font-size: 12px; color: #6366f1; margin-top: 8px; user-select: none; }
+details[open] summary { margin-bottom: 4px; }
+
+.warning { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px 12px; border-radius: 4px; font-size: 12px; margin: 10px 0; }
+.warning strong { color: #92400e; }
+
+table.coef { width: 100%; font-size: 12px; border-collapse: collapse; }
+table.coef th, table.coef td { padding: 5px 8px; border: 1px solid #e5e7eb; }
+table.coef th { background: #f9fafb; text-align: left; font-weight: 600; }
+table.coef td.r { text-align: right; font-variant-numeric: tabular-nums; }
+table.coef tr.sub td { background: #f9fafb; font-weight: 600; }
+
+.toggle-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.toggle-row label { font-size: 12px; color: #4b5563; cursor: pointer; }
+.toggle-row input[type=radio] { margin-right: 4px; }
+
+.btn-reset { padding: 6px 12px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.btn-reset:hover { background: #e5e7eb; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Simulateur Bac 2027 — Élève de Première (Bac général)</h1>
+<div class="subtitle">Projection des mentions sur les 3 scénarios d'abandon de spécialité, à partir des notes de Première. Coefficients réforme 2027 (Grand Oral 8, Mathématiques épreuve coeff 2). OCR français intégré pour lire les notes depuis un PDF ou une capture d'écran.</div>
+
+<div class="layout">
+
+  <!-- LEFT: capture des notes -->
+  <div class="section">
+    <h2>Capture des notes</h2>
+    <div class="muted" style="margin-bottom: 8px;">Glisser le bulletin Pronote (PDF ou image). Cliquer ensuite sur "Lire les notes (OCR)" pour remplir automatiquement les champs : 3 premières disciplines = spés, puis Français, HG, EnsSci, Maths spé., LV1, LV2, EPS, EMC. Les options (SEA, latin…) sont ignorées.</div>
+    <div class="drop-zone" id="dz" onclick="document.getElementById('file-input').click()">
+      <div id="dz-empty">
+        <div class="icon">📎</div>
+        <div class="label">Glisser ou cliquer</div>
+        <div class="info">.pdf, .png, .jpg, .jpeg, .webp</div>
+      </div>
+      <div id="dz-preview" class="preview" style="display:none;"></div>
+    </div>
+    <input type="file" id="file-input" accept="application/pdf,image/*" style="display:none;" onchange="handleFile(this.files[0])">
+    <div id="ocr-controls" style="display:none; margin-top: 8px;">
+      <button id="btn-ocr" class="btn-clear" onclick="runOCR()">Lire les notes (OCR)</button>
+      <button id="btn-clear" class="btn-clear" onclick="clearFile()">Retirer le fichier</button>
+      <div id="ocr-status" class="muted" style="margin-top: 6px;"></div>
+    </div>
+    <div id="ocr-result" style="display:none; margin-top: 10px; padding: 10px; background: #f9fafb; border-radius: 4px; font-size: 11px; max-height: 320px; overflow-y: auto; white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; border: 1px solid #e5e7eb;"></div>
+  </div>
+
+  <!-- RIGHT: form + résultats -->
+  <div>
+
+    <div class="section">
+      <h2>Notes détectées par OCR</h2>
+      <div class="muted" style="margin-bottom: 10px;">Toutes les notes sont remplies automatiquement à partir de la capture déposée. Modification manuelle possible si l'OCR a fait une erreur.</div>
+
+      <h3>3 spécialités de Première (3 premières lignes du bulletin)</h3>
+      <div id="spes-container"></div>
+
+      <h3>Tronc commun</h3>
+      <div class="field-row three">
+        <div class="field"><label>Français <span class="sub">(coef 10 ; sert pour Fr écrit + oral + Philo + GO)</span></label><input type="number" step="0.01" min="0" max="20" id="francais" oninput="recompute()"></div>
+        <div class="field"><label>Histoire-Géographie</label><input type="number" step="0.01" min="0" max="20" id="hg" oninput="recompute()"></div>
+        <div class="field"><label>Enseignement scientifique</label><input type="number" step="0.01" min="0" max="20" id="esci" oninput="recompute()"></div>
+      </div>
+      <div class="field-row three">
+        <div class="field"><label>Anglais LV1</label><input type="number" step="0.01" min="0" max="20" id="lva" oninput="recompute()"></div>
+        <div class="field"><label>LV2 <span class="sub" id="lvb-name">(Espagnol/Allemand/Italien)</span></label><input type="number" step="0.01" min="0" max="20" id="lvb" oninput="recompute()"></div>
+        <div class="field"><label>EPS</label><input type="number" step="0.01" min="0" max="20" id="eps" oninput="recompute()"></div>
+      </div>
+      <div class="field-row three">
+        <div class="field"><label>EMC</label><input type="number" step="0.01" min="0" max="20" id="emc" oninput="recompute()"></div>
+        <div class="field" id="maths-spec-field" style="display:none;"><label>Maths spécifiques <span class="sub">(si pas de spé Maths)</span></label><input type="number" step="0.01" min="0" max="20" id="maths-spec" oninput="recompute()"></div>
+        <div></div>
+      </div>
+
+      <div style="margin-top: 14px;">
+        <button class="btn-reset" onclick="resetAll()">Vider tous les champs</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Projection — 3 scénarios d'abandon de spécialité</h2>
+      <div id="warnings"></div>
+      <div id="scenarios" class="scenarios"></div>
+    </div>
+
+    <div class="section">
+      <h2>Coefficients utilisés (réforme 2027, Bac général)</h2>
+      <table class="coef">
+        <tr><th>Item</th><th class="r">Coeff</th><th>Source de la note</th></tr>
+        <tr class="sub"><td colspan="3">Épreuves terminales — total 60. Note Français de Première utilisée pour les 4 épreuves Fr écrit + Fr oral + Philo + GO.</td></tr>
+        <tr><td>Français écrit</td><td class="r">5</td><td>Note Français 1ère</td></tr>
+        <tr><td>Français oral</td><td class="r">5</td><td>Note Français 1ère</td></tr>
+        <tr><td>Philosophie</td><td class="r">8</td><td>Note Français 1ère</td></tr>
+        <tr><td><strong>Grand Oral</strong></td><td class="r"><strong>8</strong></td><td>Note Français 1ère (réforme 2027 : GO 10 → 8)</td></tr>
+        <tr><td>Spécialité conservée 1</td><td class="r">16</td><td>Note 1ère de la spé</td></tr>
+        <tr><td>Spécialité conservée 2</td><td class="r">16</td><td>Note 1ère de la spé</td></tr>
+        <tr><td><strong>Mathématiques</strong> <span class="muted">(épreuve obligatoire pour tous)</span></td><td class="r"><strong>2</strong></td><td>Spé Maths si l'élève l'a, sinon Maths spécifiques</td></tr>
+        <tr class="sub"><td colspan="3">Contrôle continu — total 40 (note 1ère × coef plein, projection Première)</td></tr>
+        <tr><td>Histoire-Géographie</td><td class="r">6</td><td>Note 1ère</td></tr>
+        <tr><td>LVA</td><td class="r">6</td><td>Note 1ère</td></tr>
+        <tr><td>LVB</td><td class="r">6</td><td>Note 1ère</td></tr>
+        <tr><td>Enseignement scientifique</td><td class="r">6</td><td>Note 1ère</td></tr>
+        <tr><td>EPS</td><td class="r">6</td><td>Note 1ère</td></tr>
+        <tr><td>EMC</td><td class="r">2</td><td>Note 1ère</td></tr>
+        <tr><td>Spécialité abandonnée</td><td class="r">8</td><td>Note 1ère</td></tr>
+        <tr class="sub"><td>Total général</td><td class="r">100</td><td>Note finale sur 2000</td></tr>
+      </table>
+      <div class="muted" style="margin-top: 10px;">
+        <strong>Mentions :</strong> &lt; 800 Refusé · 800–999 Oral de rattrapage · 1000–1199 Admis · 1200–1399 Assez Bien · 1400–1599 Bien · 1600–1799 Très Bien · ≥ 1800 Très Bien Félicitations.
+      </div>
+      <div class="warning">
+        <strong>Réforme 2027 — coefficients à valider.</strong> Le simulateur applique les deux modifications transmises (Grand Oral coeff 8, Mathématiques nouvelle épreuve coeff 2) sur la base de la grille actuelle du Bac général. Les autres coefficients sont inchangés. Le texte officiel de la réforme (BO Éducation nationale) doit être consulté pour validation. Source de la grille de référence (Bac général 2024) : note de service du 28-7-2021 publiée au BOEN n° 30 du 29-7-2021.
+      </div>
+      <div class="warning">
+        <strong>Méthode de projection.</strong> Les notes de Terminale ne sont pas connues. Le simulateur applique : (1) Français, Philosophie et Grand Oral = note Français de Première ; (2) tronc commun = note 1ère × coefficient plein ; (3) spécialités conservées = note 1ère de la même spé ; (4) options du bulletin (SEA, latin etc.) ignorées. Cette projection ne reflète pas la formule officielle du Bac (50% 1ère + 50% Terminale pour le CC) mais constitue une estimation simplifiée à partir des seules notes de Première.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div>
+
+<script>
+// ===== DICTIONNAIRE DES SPÉCIALITÉS =====
+const SPES = [
+  { id: 'maths',    lib: 'Mathématiques' },
+  { id: 'phys',     lib: 'Physique-Chimie' },
+  { id: 'svt',      lib: 'Sciences de la Vie et de la Terre' },
+  { id: 'nsi',      lib: 'Numérique et Sciences Informatiques' },
+  { id: 'si',       lib: "Sciences de l'Ingénieur" },
+  { id: 'ses',      lib: 'Sciences Économiques et Sociales' },
+  { id: 'hggsp',    lib: 'Histoire-Géo, Géopolitique, Sciences politiques' },
+  { id: 'hlp',      lib: 'Humanités, Littérature, Philosophie' },
+  { id: 'llcer-ang', lib: 'LLCER Anglais' },
+  { id: 'llcer-esp', lib: 'LLCER Espagnol' },
+  { id: 'llca',     lib: 'LLCA (Latin / Grec)' },
+  { id: 'arts-pl',  lib: 'Arts plastiques' },
+  { id: 'arts-mus', lib: 'Musique' },
+  { id: 'arts-thea',lib: 'Théâtre' },
+  { id: 'arts-cine',lib: 'Cinéma-Audiovisuel' },
+  { id: 'biol-eco', lib: 'Biologie-Écologie' },
+  { id: 'eppcs',    lib: 'EPPCS (EPS pratiques et culture sportives)' },
+  { id: 'autre',    lib: 'Autre spécialité' },
+];
+const speLib = id => (SPES.find(s => s.id === id) || { lib: '?' }).lib;
+
+// ===== CONSTRUIT LES 3 LIGNES DE SPÉCIALITÉS =====
+function buildSpes() {
+  const c = document.getElementById('spes-container');
+  let html = '';
+  for (let i = 1; i <= 3; i++) {
+    const opts = SPES.map(s => `<option value="${s.id}">${s.lib}</option>`).join('');
+    html += `
+      <div class="spe-row">
+        <div class="field"><label>Spécialité ${i}</label><select id="spe${i}-kind" onchange="onSpeChange()">${opts}</select></div>
+        <div class="field"><label>Note 1ère</label><input type="number" step="0.01" min="0" max="20" id="spe${i}-note" oninput="recompute()"></div>
+      </div>`;
+  }
+  c.innerHTML = html;
+  // Valeurs par défaut : combo scientifique fréquente
+  document.getElementById('spe1-kind').value = 'maths';
+  document.getElementById('spe2-kind').value = 'phys';
+  document.getElementById('spe3-kind').value = 'svt';
+}
+
+function onSpeChange() {
+  const ids = [1,2,3].map(i => document.getElementById('spe' + i + '-kind').value);
+  const hasMathsSpe = ids.includes('maths');
+  // Champ "Maths spécifiques" visible UNIQUEMENT si aucune spé Maths
+  document.getElementById('maths-spec-field').style.display = hasMathsSpe ? 'none' : '';
+  recompute();
+}
+
+// ===== GESTION DU FICHIER (PDF / IMAGE) =====
+const dz = document.getElementById('dz');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+let currentFile = null;
+
+function handleFile(file) {
+  if (!file) return;
+  currentFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const url = ev.target.result;
+    const preview = document.getElementById('dz-preview');
+    if (file.type === 'application/pdf') {
+      preview.innerHTML = `<iframe src="${url}" title="Capture des notes (PDF)"></iframe>`;
+    } else if (file.type.startsWith('image/')) {
+      preview.innerHTML = `<img src="${url}" alt="Capture des notes">`;
+    } else {
+      alert('Format non pris en charge : ' + file.type);
+      return;
+    }
+    document.getElementById('dz-empty').style.display = 'none';
+    preview.style.display = 'block';
+    dz.classList.add('loaded');
+    document.getElementById('ocr-controls').style.display = 'block';
+    document.getElementById('ocr-result').style.display = 'none';
+    document.getElementById('ocr-result').textContent = '';
+    document.getElementById('ocr-status').textContent = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearFile() {
+  currentFile = null;
+  document.getElementById('dz-empty').style.display = 'block';
+  document.getElementById('dz-preview').style.display = 'none';
+  document.getElementById('dz-preview').innerHTML = '';
+  dz.classList.remove('loaded');
+  document.getElementById('ocr-controls').style.display = 'none';
+  document.getElementById('ocr-result').style.display = 'none';
+  document.getElementById('ocr-result').textContent = '';
+  document.getElementById('ocr-status').textContent = '';
+  document.getElementById('file-input').value = '';
+}
+
+// ===== OCR =====
+async function pdfPageToImage(file) {
+  if (typeof pdfjsLib === 'undefined') throw new Error('pdf.js non chargé (vérifier la connexion internet)');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const page = await pdf.getPage(1); // Première page seulement
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL('image/png');
+}
+
+async function runOCR() {
+  if (!currentFile) { alert('Aucun fichier'); return; }
+  if (typeof Tesseract === 'undefined') { alert('Tesseract.js non chargé (vérifier la connexion internet)'); return; }
+  const status = document.getElementById('ocr-status');
+  const result = document.getElementById('ocr-result');
+  const btn = document.getElementById('btn-ocr');
+  btn.disabled = true;
+  status.textContent = 'Préparation de l\'image…';
+  result.style.display = 'none';
+  try {
+    let imageSrc;
+    if (currentFile.type === 'application/pdf') {
+      status.textContent = 'Conversion du PDF (page 1)…';
+      imageSrc = await pdfPageToImage(currentFile);
+    } else {
+      imageSrc = URL.createObjectURL(currentFile);
+    }
+    status.textContent = 'OCR en cours… (1ère exécution : téléchargement du modèle français, ~10 Mo)';
+    const { data: { text } } = await Tesseract.recognize(imageSrc, 'fra', {
+      logger: m => {
+        if (m.status === 'recognizing text') status.textContent = `OCR : ${Math.round(m.progress * 100)}%`;
+        else if (m.status) status.textContent = 'OCR : ' + m.status;
+      }
+    });
+    result.textContent = text || '(aucun texte reconnu)';
+    result.style.display = 'block';
+    const filled = autoFillFromOCR(text);
+    status.textContent = `OCR terminé. ${filled.count} champ(s) rempli(s). Vérifier les valeurs.`;
+  } catch (err) {
+    status.textContent = 'Erreur OCR : ' + err.message;
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ===== PARSEUR DE BULLETIN OCR =====
+// Patterns pour identifier chaque discipline (test sur ligne normalisée : majuscules, sans accents, alphanumérique + espaces)
+const PARSER_PATTERNS = [
+  // Tronc commun en PREMIER (plus spécifique → priorité)
+  { test: /^FRANCAIS\b/, kind: 'francais' },
+  { test: /MATHS\s*SPEC|MATHEMATIQUES\s*SPEC/, kind: 'maths_spec' },
+  { test: /HISTOIRE.GEOG(?!.*GEOPOL)/, kind: 'hg' },
+  { test: /ENSEIGN.*SCIENT|ENS.*SCIENT/, kind: 'esci' },
+  { test: /ANGLAIS|^LV1\b/, kind: 'lva' },
+  { test: /(ESPAGNOL|ALLEMAND|ITALIEN|RUSSE|CHINOIS|PORTUGAIS).*LV2|LV2.*(ESPAGNOL|ALLEMAND|ITALIEN|RUSSE)/, kind: 'lvb' },
+  { test: /^(ESPAGNOL|ALLEMAND|ITALIEN|RUSSE|CHINOIS|PORTUGAIS)\b/, kind: 'lvb' },
+  { test: /(ED.*PHYSIQUE.*SPORT|^EPS\b|EDUC.*PHYSIQUE)/, kind: 'eps' },
+  { test: /MORAL.*CIVIQUE|^EMC\b/, kind: 'emc' },
+  // Spécialités ENSUITE (la spé Maths est testée APRÈS Maths spécifiques)
+  { test: /HIST.*GEOPOL|HGGSP/, kind: 'spe', speId: 'hggsp' },
+  { test: /HUMAN.*LITT|HLP|LITTERATURE.*PHILO/, kind: 'spe', speId: 'hlp' },
+  { test: /(SC.*ECON|ECONO.*SOC|^SES\b)/, kind: 'spe', speId: 'ses' },
+  { test: /PHYS.*CHIM/, kind: 'spe', speId: 'phys' },
+  { test: /SVT|VIE.*TERRE/, kind: 'spe', speId: 'svt' },
+  { test: /NSI|NUMER.*INFORM/, kind: 'spe', speId: 'nsi' },
+  { test: /SCIENCES.*INGENIEUR|^SI\b/, kind: 'spe', speId: 'si' },
+  { test: /^MATHEMATIQUES?\b/, kind: 'spe', speId: 'maths' },
+  { test: /LLCER.*ANGL/, kind: 'spe', speId: 'llcer-ang' },
+  { test: /LLCER.*ESP/, kind: 'spe', speId: 'llcer-esp' },
+  { test: /LLCA|LATIN|GREC/, kind: 'spe', speId: 'llca' },
+  { test: /ARTS.*PLAST/, kind: 'spe', speId: 'arts-pl' },
+  { test: /MUSIQUE/, kind: 'spe', speId: 'arts-mus' },
+  { test: /THEATRE/, kind: 'spe', speId: 'arts-thea' },
+  { test: /CINE.*AUDIO/, kind: 'spe', speId: 'arts-cine' },
+  { test: /BIOL.*ECO/, kind: 'spe', speId: 'biol-eco' },
+  { test: /EPPCS/, kind: 'spe', speId: 'eppcs' },
+];
+
+const SPE_LABELS = {
+  hggsp: 'HGGSP', hlp: 'HLP', ses: 'SES', phys: 'Physique-Chimie', svt: 'SVT',
+  nsi: 'NSI', si: "Sciences de l'Ingénieur", maths: 'Mathématiques',
+  'llcer-ang': 'LLCER Anglais', 'llcer-esp': 'LLCER Espagnol', llca: 'LLCA',
+  'arts-pl': 'Arts plastiques', 'arts-mus': 'Musique', 'arts-thea': 'Théâtre',
+  'arts-cine': 'Cinéma-Audiovisuel', 'biol-eco': 'Biologie-Écologie', eppcs: 'EPPCS'
+};
+
+function normalize(s) {
+  return s.toUpperCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+// Extrait { line, norm, grade, coef } depuis une ligne brute. Retourne null si pas de note plausible.
+function parseLine(line) {
+  const nums = (line.match(/\d+(?:[.,]\d+)?/g) || []).map(n => parseFloat(n.replace(',', '.')));
+  // On retient les nombres entre 0 et 20 → candidats pour grade
+  const small = nums.filter(n => n >= 0 && n <= 20);
+  if (small.length === 0) return null;
+  const grade = small[small.length - 1]; // dernier nombre <= 20 = note
+  const coef = small.length >= 2 ? small[small.length - 2] : null;
+  return { line: line.trim(), norm: normalize(line), grade, coef };
+}
+
+// Identifie la nature d'une ligne via PARSER_PATTERNS. Retourne { kind, speId? } ou null.
+function identifyLine(norm) {
+  for (const p of PARSER_PATTERNS) {
+    if (p.test.test(norm)) return p;
+  }
+  return null;
+}
+
+function autoFillFromOCR(rawText) {
+  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 2);
+  const records = lines.map(parseLine).filter(x => x !== null);
+
+  // 1) Les 3 spés = 3 premières lignes "data" non identifiées comme tronc commun
+  // Stratégie : on parcourt chaque enregistrement et on assigne à un slot connu.
+  // Les 3 premières lignes restantes (non identifiées comme TC) sont les spés.
+  const spes = []; // [{speId, label, grade, coef}]
+  const tc = {};   // { francais, hg, esci, maths_spec, lva, lvb, eps, emc }
+
+  for (const r of records) {
+    const id = identifyLine(r.norm);
+    if (id && id.kind === 'spe') {
+      if (spes.length < 3) spes.push({ speId: id.speId, label: SPE_LABELS[id.speId] || id.speId, grade: r.grade, coef: r.coef, norm: r.norm });
+    } else if (id) {
+      // tronc commun reconnu
+      if (!tc[id.kind]) tc[id.kind] = { grade: r.grade, coef: r.coef, norm: r.norm };
+    } else {
+      // Non identifié : si on a moins de 3 spés ET pas de "francais" déjà détecté plus bas,
+      // on peut tout de même considérer cette ligne comme une spé (spé exotique non listée)
+      if (spes.length < 3) {
+        spes.push({ speId: 'autre', label: r.line.replace(/\d+([.,]\d+)?/g, '').trim().slice(0, 60) || 'Autre', grade: r.grade, coef: r.coef, norm: r.norm });
+      }
+      // sinon : option (SEA…) → on ignore
+    }
+  }
+
+  // Heuristique de tri des spés : on garde l'ordre du bulletin (les 3 premières disciplines).
+  // Si plus de 3 ont été marquées spe, on tronque (déjà géré : spes.length < 3).
+
+  // 2) Renseigner la dropdown des spés
+  for (let i = 0; i < 3; i++) {
+    const sp = spes[i];
+    const sel = document.getElementById('spe' + (i+1) + '-kind');
+    const note = document.getElementById('spe' + (i+1) + '-note');
+    if (!sp) continue;
+    if (sp.speId && sp.speId !== 'autre' && SPES.some(s => s.id === sp.speId)) {
+      sel.value = sp.speId;
+    } else {
+      sel.value = 'autre';
+    }
+    note.value = sp.grade.toFixed(2);
+  }
+  // Si moins de 3 spés détectées, on met les manquantes à "autre" sans note
+  for (let i = spes.length; i < 3; i++) {
+    document.getElementById('spe' + (i+1) + '-kind').value = 'autre';
+    document.getElementById('spe' + (i+1) + '-note').value = '';
+  }
+
+  // 3) Renseigner le tronc commun
+  let count = spes.length; // spés remplies
+  const setIfPresent = (key, fieldId) => {
+    if (tc[key] && tc[key].grade != null) {
+      document.getElementById(fieldId).value = tc[key].grade.toFixed(2);
+      count++;
+    }
+  };
+  setIfPresent('francais', 'francais');
+  setIfPresent('hg', 'hg');
+  setIfPresent('esci', 'esci');
+  setIfPresent('lva', 'lva');
+  setIfPresent('lvb', 'lvb');
+  setIfPresent('eps', 'eps');
+  setIfPresent('emc', 'emc');
+  setIfPresent('maths_spec', 'maths-spec');
+
+  // 4) Mettre à jour la visibilité du champ "Maths spécifiques"
+  onSpeChange();
+  recompute();
+
+  return { count, spes, tc };
+}
+
+// ===== HELPERS =====
+function v(id) { const el = document.getElementById(id); if (!el || el.value === '') return null; const x = parseFloat(el.value); return isNaN(x) ? null : x; }
+
+function getSpes() {
+  return [1,2,3].map(i => ({
+    idx: i - 1,
+    id: document.getElementById('spe'+i+'-kind').value,
+    lib: speLib(document.getElementById('spe'+i+'-kind').value),
+    note: v('spe'+i+'-note')
+  }));
+}
+
+// Mention basée sur la MOYENNE /20 (le total des coefficients étant systématiquement 100,
+// le total /2000 est équivalent — on conserve la moyenne /20 pour rester robuste à toute évolution).
+function mentionFor(moy) {
+  if (moy >= 18) return ['TRÈS BIEN avec Félicitations', 'm-tbf'];
+  if (moy >= 16) return ['TRÈS BIEN', 'm-tb'];
+  if (moy >= 14) return ['BIEN', 'm-b'];
+  if (moy >= 12) return ['ASSEZ BIEN', 'm-ab'];
+  if (moy >= 10) return ['ADMIS sans mention', 'm-adm'];
+  if (moy >= 8) return ['Oral de rattrapage', 'm-oral'];
+  return ['Refusé', 'm-ref'];
+}
+
+// ===== CALCUL D'UN SCÉNARIO =====
+function computeScenario(dropIdx) {
+  const spes = getSpes();
+  const dropped = spes[dropIdx];
+  const kept = spes.filter((_, i) => i !== dropIdx);
+  const willKeepMathsSpe = kept.some(s => s.id === 'maths');
+  const hasAnyMathsSpe = spes.some(s => s.id === 'maths');
+
+  // Notes saisies 1ère
+  const n1 = {
+    hg: v('hg'), emc: v('emc'), eps: v('eps'),
+    lva: v('lva'), lvb: v('lvb'),
+    esci: v('esci'), maths_spec: v('maths-spec'),
+    francais: v('francais'),
+  };
+
+  const pieces = [];
+  const missing = [];
+  let pts_ep = 0, pts_cc = 0, coefs_ep = 0, coefs_cc = 0;
+
+  function addEp(label, note, coef) {
+    coefs_ep += coef;
+    if (note == null) { missing.push(label); pieces.push({ label, note: '—', coef, pts: null, miss: true, kind: 'ep' }); return; }
+    const p = note * coef; pts_ep += p;
+    pieces.push({ label, note, coef, pts: p, kind: 'ep' });
+  }
+
+  // ===== ÉPREUVES TERMINALES (60) =====
+  // Français, Philosophie et Grand Oral utilisent tous la même note de Français de Première.
+  addEp('Français écrit (= note Français)', n1.francais, 5);
+  addEp('Français oral (= note Français)', n1.francais, 5);
+  addEp('Philosophie (= note Français)', n1.francais, 8);
+  addEp('Grand Oral (= note Français)', n1.francais, 8);
+  // 2 spés conservées : note Terminale = note 1ère de la même spé
+  kept.forEach((sp, i) => {
+    addEp(`Spé conservée ${i+1} : ${sp.lib}`, sp.note, 16);
+  });
+  // Mathématiques épreuve coeff 2 (réforme 2027) — pour TOUS les élèves
+  // Règle : note de la spé Maths si l'élève l'a (qu'elle soit conservée ou abandonnée),
+  //         sinon note du champ "Maths spécifiques".
+  let mathsNoteRaw, mathsLabel;
+  if (hasAnyMathsSpe) {
+    mathsNoteRaw = spes.find(s => s.id === 'maths').note;
+    mathsLabel = 'Mathématiques (épreuve coeff 2 — note de spé Maths)';
+  } else {
+    mathsNoteRaw = n1.maths_spec;
+    mathsLabel = 'Mathématiques (épreuve coeff 2 — Maths spécifiques)';
+  }
+  addEp(mathsLabel, mathsNoteRaw, 2);
+
+  // ===== CONTRÔLE CONTINU (40) — note 1ère × coefficient plein =====
+  function ccDirect(label, note1, coef) {
+    if (note1 == null) { missing.push(label); pieces.push({ label, note: '—', coef, pts: null, miss: true, kind: 'cc' }); coefs_cc += coef; return; }
+    const p = note1 * coef; pts_cc += p; coefs_cc += coef;
+    pieces.push({ label, note: note1, coef, pts: p, kind: 'cc' });
+  }
+  ccDirect('CC Histoire-Géographie', n1.hg, 6);
+  ccDirect('CC LVA', n1.lva, 6);
+  ccDirect('CC LVB', n1.lvb, 6);
+  ccDirect('CC Enseignement scientifique', n1.esci, 6);
+  ccDirect('CC EPS', n1.eps, 6);
+  ccDirect('CC EMC', n1.emc, 2);
+  // Spé abandonnée : note 1ère × 8
+  ccDirect(`Spé abandonnée : ${dropped.lib}`, dropped.note, 8);
+
+  const total = pts_ep + pts_cc;
+  const totalCoefs = coefs_ep + coefs_cc;
+  const moyenne = totalCoefs ? total / totalCoefs : 0;
+  return {
+    total: Math.round(total * 100) / 100,
+    pts_ep: Math.round(pts_ep * 100) / 100,
+    pts_cc: Math.round(pts_cc * 100) / 100,
+    coefs_ep, coefs_cc, totalCoefs,
+    moyenne: Math.round(moyenne * 100) / 100,
+    missing, pieces, dropped, kept
+  };
+}
+
+// ===== RENDU =====
+function recompute() {
+  const results = [0,1,2].map(i => computeScenario(i));
+  // Identifie le meilleur scénario (uniquement si les totaux diffèrent et aucun manque)
+  const completes = results.filter(r => r.missing.length === 0);
+  const totals = completes.map(r => r.total);
+  const totalsDiffer = totals.length > 0 && new Set(totals.map(t => t.toFixed(2))).size > 1;
+  const maxTotal = totalsDiffer ? Math.max(...totals) : null;
+
+  let html = '';
+  results.forEach((r, i) => {
+    const [men, cls] = mentionFor(r.moyenne);
+    const isBest = maxTotal != null && r.total === maxTotal && r.missing.length === 0;
+    const maxTotalCoef = r.totalCoefs * 20;
+    html += `
+      <div class="scenario ${isBest ? 'best' : ''}">
+        <div class="scenario-title">Scénario ${i+1}${isBest ? ' · meilleur total' : ''}</div>
+        <div class="scenario-drop">Abandonner :<br>${r.dropped.lib}</div>
+        <div class="scenario-mention"><span class="mention ${cls}">${men}</span></div>
+        <div class="scenario-total"><strong>${r.moyenne.toFixed(2)}</strong> / 20<br>${r.total.toFixed(2)} points / ${maxTotalCoef}</div>
+        <div class="muted" style="margin-top: 4px;">Épreuves ${r.pts_ep.toFixed(0)} / ${r.coefs_ep * 20} · CC ${r.pts_cc.toFixed(0)} / ${r.coefs_cc * 20}</div>
+        ${r.missing.length ? `<div class="muted" style="margin-top: 6px; color: #9a3412;">⚠ ${r.missing.length} note(s) manquante(s)</div>` : ''}
+        <details>
+          <summary>Détail du calcul</summary>
+          <div class="detail">
+            <div class="detail-row head"><div>Item</div><div class="num">Note</div><div class="num">Coef</div><div class="num">Points</div></div>
+            ${r.pieces.map(p => `
+              <div class="detail-row${p.miss ? ' miss' : ''}">
+                <div>${p.label}</div>
+                <div class="num">${p.note}</div>
+                <div class="num">${p.coef}</div>
+                <div class="num">${p.pts == null ? '—' : p.pts.toFixed(2)}</div>
+              </div>`).join('')}
+          </div>
+        </details>
+      </div>`;
+  });
+  document.getElementById('scenarios').innerHTML = html;
+
+  // Avertissements globaux
+  const spes = getSpes();
+  const ids = spes.map(s => s.id);
+  const dup = ids.length !== new Set(ids).size;
+  let warn = '';
+  if (dup) warn += '<div class="warning"><strong>Doublon détecté :</strong> deux spécialités identiques sont sélectionnées. Choisir 3 spécialités différentes.</div>';
+  if (spes.some(s => s.note == null)) warn += '<div class="warning">Toutes les notes de spécialités ne sont pas saisies. Les scénarios sont incomplets.</div>';
+  document.getElementById('warnings').innerHTML = warn;
+}
+
+function resetAll() {
+  if (!confirm('Effacer tous les champs ?')) return;
+  document.querySelectorAll('input[type=number]').forEach(el => el.value = '');
+  buildSpes();
+  onSpeChange();
+}
+
+// init
+buildSpes();
+onSpeChange();
+recompute();
+</script>
+</body>
+</html>
