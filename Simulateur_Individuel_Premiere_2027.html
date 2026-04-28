@@ -110,6 +110,13 @@ table.coef tr.sub td { background: #f9fafb; font-weight: 600; }
       <div id="ocr-status" class="muted" style="margin-top: 6px;"></div>
     </div>
     <div id="ocr-result" style="display:none; margin-top: 10px; padding: 10px; background: #f9fafb; border-radius: 4px; font-size: 11px; max-height: 320px; overflow-y: auto; white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; border: 1px solid #e5e7eb;"></div>
+
+    <details style="margin-top: 12px;">
+      <summary style="cursor: pointer; font-size: 12px; color: #6366f1;">OCR raté ? Coller le texte du bulletin manuellement</summary>
+      <div class="muted" style="margin: 6px 0;">Copier le tableau du bulletin (une discipline par ligne, avec coef et note) puis cliquer sur "Analyser le texte collé". Même règle : 3 premières lignes = spés.</div>
+      <textarea id="manual-text" rows="10" style="width:100%; padding:8px; font-size:11px; font-family: ui-monospace, Consolas, monospace; border: 1px solid #d1d5db; border-radius: 4px; resize: vertical;" placeholder="Exemple :&#10;HIST.GEO.GEOPOL.S.P.    16    17,86&#10;HUMAN.LITTER.PHILO.    16    15,94&#10;SC. ECONO. & SOCIALES    16    11,41&#10;FRANCAIS    10    15,33&#10;…"></textarea>
+      <button class="btn-clear" style="margin-top: 6px;" onclick="parseManualText()">Analyser le texte collé</button>
+    </details>
   </div>
 
   <!-- RIGHT: form + résultats -->
@@ -189,15 +196,15 @@ table.coef tr.sub td { background: #f9fafb; font-weight: 600; }
 </div>
 
 <script>
-// ===== DICTIONNAIRE DES 7 SPÉCIALITÉS (Lycée Stanislas) =====
+// ===== DICTIONNAIRE DES 7 SPÉCIALITÉS (ordre alphabétique) =====
 const SPES = [
-  { id: 'maths',    lib: 'Mathématiques' },
-  { id: 'phys',     lib: 'Physique-Chimie' },
-  { id: 'svt',      lib: 'Sciences de la Vie et de la Terre' },
-  { id: 'nsi',      lib: 'Numérique et Sciences Informatiques' },
-  { id: 'ses',      lib: 'Sciences Économiques et Sociales' },
   { id: 'hggsp',    lib: 'Histoire-Géo, Géopolitique, Sciences politiques' },
   { id: 'hlp',      lib: 'Humanités, Littérature, Philosophie' },
+  { id: 'maths',    lib: 'Mathématiques' },
+  { id: 'nsi',      lib: 'Numérique et Sciences Informatiques' },
+  { id: 'phys',     lib: 'Physique-Chimie' },
+  { id: 'svt',      lib: 'Sciences de la Vie et de la Terre' },
+  { id: 'ses',      lib: 'Sciences Économiques et Sociales' },
 ];
 const speLib = id => (SPES.find(s => s.id === id) || { lib: '?' }).lib;
 
@@ -278,18 +285,48 @@ function clearFile() {
   document.getElementById('file-input').value = '';
 }
 
-// ===== OCR =====
+// ===== OCR (haute résolution + pré-traitement) =====
 async function pdfPageToImage(file) {
   if (typeof pdfjsLib === 'undefined') throw new Error('pdf.js non chargé (vérifier la connexion internet)');
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const page = await pdf.getPage(1); // Première page seulement
-  const viewport = page.getViewport({ scale: 2 });
+  const viewport = page.getViewport({ scale: 3 }); // ↑ haute résolution
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL('image/png');
+}
+
+// Pré-traitement : agrandit (≥ 2400 px de large), passe en niveaux de gris,
+// boost le contraste. C'est le levier n°1 pour un OCR Tesseract de qualité
+// sur une capture d'écran de bulletin (souvent basse résolution).
+async function preprocessImage(imageSrc, minWidth = 2400) {
+  const img = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = imageSrc;
+  });
+  const scale = Math.max(1, minWidth / img.width);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  // Niveaux de gris + augmentation du contraste (gain 1.6, centré sur 128)
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const g = px[i] * 0.299 + px[i+1] * 0.587 + px[i+2] * 0.114;
+    const c = Math.max(0, Math.min(255, (g - 128) * 1.6 + 128));
+    px[i] = px[i+1] = px[i+2] = c;
+  }
+  ctx.putImageData(data, 0, 0);
   return canvas.toDataURL('image/png');
 }
 
@@ -302,35 +339,65 @@ async function runOCR() {
   btn.disabled = true;
   status.textContent = 'Préparation de l\'image…';
   result.style.display = 'none';
+  let worker = null;
   try {
     let imageSrc;
     if (currentFile.type === 'application/pdf') {
-      status.textContent = 'Conversion du PDF (page 1)…';
+      status.textContent = 'Conversion du PDF (haute résolution)…';
       imageSrc = await pdfPageToImage(currentFile);
     } else {
       imageSrc = URL.createObjectURL(currentFile);
     }
+    status.textContent = 'Pré-traitement (upscale + niveaux de gris + contraste)…';
+    const processed = await preprocessImage(imageSrc, 2400);
+
     status.textContent = 'OCR en cours… (1ère exécution : téléchargement du modèle français, ~10 Mo)';
-    const { data: { text } } = await Tesseract.recognize(imageSrc, 'fra', {
+    worker = await Tesseract.createWorker('fra', 1, {
       logger: m => {
         if (m.status === 'recognizing text') status.textContent = `OCR : ${Math.round(m.progress * 100)}%`;
-        else if (m.status) status.textContent = 'OCR : ' + m.status;
       }
     });
+    // PSM 6 = bloc de texte uniforme (adapté à un tableau de bulletin)
+    // preserve_interword_spaces aide à conserver la séparation discipline / coef / note
+    await worker.setParameters({
+      tessedit_pageseg_mode: '6',
+      preserve_interword_spaces: '1',
+    });
+    const { data: { text } } = await worker.recognize(processed);
+
     result.textContent = text || '(aucun texte reconnu)';
     result.style.display = 'block';
     const filled = autoFillFromOCR(text);
     let msg = `OCR terminé. ${filled.count} champ(s) rempli(s).`;
     if (filled.unmatchedSpes && filled.unmatchedSpes.length > 0) {
-      msg += ` ⚠ Spé(s) non reconnue(s) parmi les 7 : ${filled.unmatchedSpes.join(' ; ')}. Vérifier le menu déroulant correspondant.`;
+      msg += ` ⚠ Spé(s) non reconnue(s) parmi les 7 : ${filled.unmatchedSpes.join(' ; ')}. Vérifier le menu déroulant.`;
+    }
+    if (filled.count < 8) {
+      msg += ' Si le résultat est trop incomplet : utiliser la zone "Coller le texte manuellement" en bas.';
     }
     status.textContent = msg;
   } catch (err) {
     status.textContent = 'Erreur OCR : ' + err.message;
     console.error(err);
   } finally {
+    if (worker) { try { await worker.terminate(); } catch (e) {} }
     btn.disabled = false;
   }
+}
+
+// Filet de sécurité : si l'OCR donne un mauvais résultat, l'utilisatrice
+// peut copier/coller manuellement le texte du bulletin et lancer le parseur dessus.
+function parseManualText() {
+  const txt = document.getElementById('manual-text').value;
+  if (!txt.trim()) { alert('Coller du texte d\'abord.'); return; }
+  document.getElementById('ocr-result').textContent = txt;
+  document.getElementById('ocr-result').style.display = 'block';
+  const filled = autoFillFromOCR(txt);
+  let msg = `Analyse du texte collé : ${filled.count} champ(s) rempli(s).`;
+  if (filled.unmatchedSpes && filled.unmatchedSpes.length > 0) {
+    msg += ` ⚠ Spé(s) non reconnue(s) : ${filled.unmatchedSpes.join(' ; ')}.`;
+  }
+  document.getElementById('ocr-status').textContent = msg;
 }
 
 // ===== PARSEUR DE BULLETIN OCR =====
