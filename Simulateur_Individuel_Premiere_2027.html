@@ -94,7 +94,7 @@ table.coef tr.sub td { background: #f9fafb; font-weight: 600; }
   <!-- LEFT: capture des notes -->
   <div class="section">
     <h2>Capture des notes</h2>
-    <div class="muted" style="margin-bottom: 8px;">Glisser le bulletin Pronote (PDF ou image). Cliquer ensuite sur "Lire les notes (OCR)" pour remplir automatiquement les champs : 3 premières disciplines = spés, puis Français, HG, EnsSci, Maths spé., LV1, LV2, EPS, EMC. Les options (SEA, latin…) sont ignorées.</div>
+    <div class="muted" style="margin-bottom: 8px;">Glisser le bulletin (PDF ou image), puis cliquer sur "Lire les notes (OCR)". Règle stricte : les <strong>3 premières lignes</strong> = les 3 spécialités. Lignes suivantes = Français (sert pour Fr écrit + oral + Philo + GO), HG, EnsSci, Maths spécifiques (ou spé Maths si présente), LV1, LV2, EPS, EMC. Toute ligne non reconnue (options : SEA, latin, etc.) est ignorée. Aucune saisie manuelle requise.</div>
     <div class="drop-zone" id="dz" onclick="document.getElementById('file-input').click()">
       <div id="dz-empty">
         <div class="icon">📎</div>
@@ -411,31 +411,33 @@ function autoFillFromOCR(rawText) {
   const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 2);
   const records = lines.map(parseLine).filter(x => x !== null);
 
-  // 1) Les 3 spés = 3 premières lignes "data" non identifiées comme tronc commun
-  // Stratégie : on parcourt chaque enregistrement et on assigne à un slot connu.
-  // Les 3 premières lignes restantes (non identifiées comme TC) sont les spés.
+  // Règle stricte (instruction Karine) :
+  //   • Les 3 PREMIÈRES lignes du bulletin = les 3 spécialités, quelles qu'elles soient.
+  //   • Lignes 4+ : on tente UNIQUEMENT les motifs de tronc commun.
+  //     Tout ce qui ne matche pas (options type SEA, latin, etc.) est ignoré.
   const spes = []; // [{speId, label, grade, coef}]
   const tc = {};   // { francais, hg, esci, maths_spec, lva, lvb, eps, emc }
 
-  for (const r of records) {
-    const id = identifyLine(r.norm);
-    if (id && id.kind === 'spe') {
-      if (spes.length < 3) spes.push({ speId: id.speId, label: SPE_LABELS[id.speId] || id.speId, grade: r.grade, coef: r.coef, norm: r.norm });
-    } else if (id) {
-      // tronc commun reconnu
-      if (!tc[id.kind]) tc[id.kind] = { grade: r.grade, coef: r.coef, norm: r.norm };
-    } else {
-      // Non identifié : si on a moins de 3 spés ET pas de "francais" déjà détecté plus bas,
-      // on peut tout de même considérer cette ligne comme une spé (spé exotique non listée)
-      if (spes.length < 3) {
-        spes.push({ speId: 'autre', label: r.line.replace(/\d+([.,]\d+)?/g, '').trim().slice(0, 60) || 'Autre', grade: r.grade, coef: r.coef, norm: r.norm });
+  records.forEach((r, idx) => {
+    if (idx < 3) {
+      // Spécialité (position-based)
+      const id = identifyLine(r.norm);
+      let speId = 'autre';
+      let label = r.line.replace(/\d+([.,]\d+)?/g, '').trim().slice(0, 60) || 'Autre';
+      if (id && id.kind === 'spe') {
+        speId = id.speId;
+        label = SPE_LABELS[id.speId] || speId;
       }
-      // sinon : option (SEA…) → on ignore
+      spes.push({ speId, label, grade: r.grade, coef: r.coef, norm: r.norm });
+    } else {
+      // Tronc commun (pattern-based, premier match conservé)
+      const id = identifyLine(r.norm);
+      if (id && id.kind !== 'spe' && !tc[id.kind]) {
+        tc[id.kind] = { grade: r.grade, coef: r.coef, norm: r.norm };
+      }
+      // Sinon (option type SEA, ou doublon TC) : ignoré
     }
-  }
-
-  // Heuristique de tri des spés : on garde l'ordre du bulletin (les 3 premières disciplines).
-  // Si plus de 3 ont été marquées spe, on tronque (déjà géré : spes.length < 3).
+  });
 
   // 2) Renseigner la dropdown des spés
   for (let i = 0; i < 3; i++) {
