@@ -189,26 +189,15 @@ table.coef tr.sub td { background: #f9fafb; font-weight: 600; }
 </div>
 
 <script>
-// ===== DICTIONNAIRE DES SPÉCIALITÉS =====
+// ===== DICTIONNAIRE DES 7 SPÉCIALITÉS (Lycée Stanislas) =====
 const SPES = [
   { id: 'maths',    lib: 'Mathématiques' },
   { id: 'phys',     lib: 'Physique-Chimie' },
   { id: 'svt',      lib: 'Sciences de la Vie et de la Terre' },
   { id: 'nsi',      lib: 'Numérique et Sciences Informatiques' },
-  { id: 'si',       lib: "Sciences de l'Ingénieur" },
   { id: 'ses',      lib: 'Sciences Économiques et Sociales' },
   { id: 'hggsp',    lib: 'Histoire-Géo, Géopolitique, Sciences politiques' },
   { id: 'hlp',      lib: 'Humanités, Littérature, Philosophie' },
-  { id: 'llcer-ang', lib: 'LLCER Anglais' },
-  { id: 'llcer-esp', lib: 'LLCER Espagnol' },
-  { id: 'llca',     lib: 'LLCA (Latin / Grec)' },
-  { id: 'arts-pl',  lib: 'Arts plastiques' },
-  { id: 'arts-mus', lib: 'Musique' },
-  { id: 'arts-thea',lib: 'Théâtre' },
-  { id: 'arts-cine',lib: 'Cinéma-Audiovisuel' },
-  { id: 'biol-eco', lib: 'Biologie-Écologie' },
-  { id: 'eppcs',    lib: 'EPPCS (EPS pratiques et culture sportives)' },
-  { id: 'autre',    lib: 'Autre spécialité' },
 ];
 const speLib = id => (SPES.find(s => s.id === id) || { lib: '?' }).lib;
 
@@ -331,7 +320,11 @@ async function runOCR() {
     result.textContent = text || '(aucun texte reconnu)';
     result.style.display = 'block';
     const filled = autoFillFromOCR(text);
-    status.textContent = `OCR terminé. ${filled.count} champ(s) rempli(s). Vérifier les valeurs.`;
+    let msg = `OCR terminé. ${filled.count} champ(s) rempli(s).`;
+    if (filled.unmatchedSpes && filled.unmatchedSpes.length > 0) {
+      msg += ` ⚠ Spé(s) non reconnue(s) parmi les 7 : ${filled.unmatchedSpes.join(' ; ')}. Vérifier le menu déroulant correspondant.`;
+    }
+    status.textContent = msg;
   } catch (err) {
     status.textContent = 'Erreur OCR : ' + err.message;
     console.error(err);
@@ -353,32 +346,21 @@ const PARSER_PATTERNS = [
   { test: /^(ESPAGNOL|ALLEMAND|ITALIEN|RUSSE|CHINOIS|PORTUGAIS)\b/, kind: 'lvb' },
   { test: /(ED.*PHYSIQUE.*SPORT|^EPS\b|EDUC.*PHYSIQUE)/, kind: 'eps' },
   { test: /MORAL.*CIVIQUE|^EMC\b/, kind: 'emc' },
-  // Spécialités ENSUITE (la spé Maths est testée APRÈS Maths spécifiques)
-  { test: /HIST.*GEOPOL|HGGSP/, kind: 'spe', speId: 'hggsp' },
-  { test: /HUMAN.*LITT|HLP|LITTERATURE.*PHILO/, kind: 'spe', speId: 'hlp' },
-  { test: /(SC.*ECON|ECONO.*SOC|^SES\b)/, kind: 'spe', speId: 'ses' },
-  { test: /PHYS.*CHIM/, kind: 'spe', speId: 'phys' },
-  { test: /SVT|VIE.*TERRE/, kind: 'spe', speId: 'svt' },
-  { test: /NSI|NUMER.*INFORM/, kind: 'spe', speId: 'nsi' },
-  { test: /SCIENCES.*INGENIEUR|^SI\b/, kind: 'spe', speId: 'si' },
-  { test: /^MATHEMATIQUES?\b/, kind: 'spe', speId: 'maths' },
-  { test: /LLCER.*ANGL/, kind: 'spe', speId: 'llcer-ang' },
-  { test: /LLCER.*ESP/, kind: 'spe', speId: 'llcer-esp' },
-  { test: /LLCA|LATIN|GREC/, kind: 'spe', speId: 'llca' },
-  { test: /ARTS.*PLAST/, kind: 'spe', speId: 'arts-pl' },
-  { test: /MUSIQUE/, kind: 'spe', speId: 'arts-mus' },
-  { test: /THEATRE/, kind: 'spe', speId: 'arts-thea' },
-  { test: /CINE.*AUDIO/, kind: 'spe', speId: 'arts-cine' },
-  { test: /BIOL.*ECO/, kind: 'spe', speId: 'biol-eco' },
-  { test: /EPPCS/, kind: 'spe', speId: 'eppcs' },
+  // Spécialités ENSUITE — patterns volontairement permissifs : on tolère
+  // les variantes d'intitulés OCR (HIST.GEO.GEOPOL.S.P., HGGSP, etc.).
+  // La spé Maths est testée APRÈS le motif "MATHS SPECIFIQUES" du tronc commun.
+  { test: /HIST.*GEOPOL|HGGSP|GEOPOL.*POLIT/, kind: 'spe', speId: 'hggsp' },
+  { test: /HUMAN.*LITT|HLP|LITT.*PHILO|HUMANITE/, kind: 'spe', speId: 'hlp' },
+  { test: /SC.*ECON|ECONO.*SOC|^SES\b|ECONOMIQ.*SOC/, kind: 'spe', speId: 'ses' },
+  { test: /PHYS.*CHIM|^PC\b/, kind: 'spe', speId: 'phys' },
+  { test: /SVT|VIE.*TERRE|SCIENCES.*VIE/, kind: 'spe', speId: 'svt' },
+  { test: /NSI|NUMER.*INFOR/, kind: 'spe', speId: 'nsi' },
+  { test: /^MATH/, kind: 'spe', speId: 'maths' },
 ];
 
 const SPE_LABELS = {
   hggsp: 'HGGSP', hlp: 'HLP', ses: 'SES', phys: 'Physique-Chimie', svt: 'SVT',
-  nsi: 'NSI', si: "Sciences de l'Ingénieur", maths: 'Mathématiques',
-  'llcer-ang': 'LLCER Anglais', 'llcer-esp': 'LLCER Espagnol', llca: 'LLCA',
-  'arts-pl': 'Arts plastiques', 'arts-mus': 'Musique', 'arts-thea': 'Théâtre',
-  'arts-cine': 'Cinéma-Audiovisuel', 'biol-eco': 'Biologie-Écologie', eppcs: 'EPPCS'
+  nsi: 'NSI', maths: 'Mathématiques'
 };
 
 function normalize(s) {
@@ -389,13 +371,30 @@ function normalize(s) {
 }
 
 // Extrait { line, norm, grade, coef } depuis une ligne brute. Retourne null si pas de note plausible.
+// Règle pour distinguer NOTE et COEF dans la capture :
+//   • La note se trouve en colonne de droite ; elle a presque toujours une décimale (15,33 ; 16,51).
+//   • Le coef est en colonne du milieu ; il est souvent entier (6, 16, 2) mais parfois décimal (2.4).
+//   • Stratégie : si plusieurs nombres ≤ 20, on PRÉFÈRE le dernier nombre AVEC décimale comme note.
+//     À défaut (tous entiers), on prend le dernier nombre ≤ 20 (= colonne de droite).
 function parseLine(line) {
-  const nums = (line.match(/\d+(?:[.,]\d+)?/g) || []).map(n => parseFloat(n.replace(',', '.')));
-  // On retient les nombres entre 0 et 20 → candidats pour grade
-  const small = nums.filter(n => n >= 0 && n <= 20);
+  const tokens = line.match(/\d+(?:[.,]\d+)?/g) || [];
+  if (tokens.length === 0) return null;
+  const parsed = tokens.map(t => ({
+    val: parseFloat(t.replace(',', '.')),
+    hasDecimal: /[.,]/.test(t)
+  }));
+  const small = parsed.filter(n => n.val >= 0 && n.val <= 20);
   if (small.length === 0) return null;
-  const grade = small[small.length - 1]; // dernier nombre <= 20 = note
-  const coef = small.length >= 2 ? small[small.length - 2] : null;
+
+  let gradeIdx;
+  const decimals = small.filter(n => n.hasDecimal);
+  if (decimals.length > 0) {
+    gradeIdx = small.lastIndexOf(decimals[decimals.length - 1]);
+  } else {
+    gradeIdx = small.length - 1;
+  }
+  const grade = small[gradeIdx].val;
+  const coef = gradeIdx > 0 ? small[gradeIdx - 1].val : null;
   return { line: line.trim(), norm: normalize(line), grade, coef };
 }
 
@@ -418,15 +417,18 @@ function autoFillFromOCR(rawText) {
   const spes = []; // [{speId, label, grade, coef}]
   const tc = {};   // { francais, hg, esci, maths_spec, lva, lvb, eps, emc }
 
+  const unmatchedSpes = []; // pour log si une spé OCR ne matche pas les 7 connues
   records.forEach((r, idx) => {
     if (idx < 3) {
       // Spécialité (position-based)
       const id = identifyLine(r.norm);
-      let speId = 'autre';
-      let label = r.line.replace(/\d+([.,]\d+)?/g, '').trim().slice(0, 60) || 'Autre';
+      let speId = null;
+      let label = r.line.replace(/\d+([.,]\d+)?/g, '').trim().slice(0, 60) || '?';
       if (id && id.kind === 'spe') {
         speId = id.speId;
         label = SPE_LABELS[id.speId] || speId;
+      } else {
+        unmatchedSpes.push(label);
       }
       spes.push({ speId, label, grade: r.grade, coef: r.coef, norm: r.norm });
     } else {
@@ -445,17 +447,20 @@ function autoFillFromOCR(rawText) {
     const sel = document.getElementById('spe' + (i+1) + '-kind');
     const note = document.getElementById('spe' + (i+1) + '-note');
     if (!sp) continue;
-    if (sp.speId && sp.speId !== 'autre' && SPES.some(s => s.id === sp.speId)) {
+    if (sp.speId && SPES.some(s => s.id === sp.speId)) {
       sel.value = sp.speId;
-    } else {
-      sel.value = 'autre';
     }
+    // Si OCR non reconnu : on laisse la dropdown sur sa valeur courante
+    // (un avertissement sera affiché). La note est remplie quoi qu'il arrive.
     note.value = sp.grade.toFixed(2);
   }
-  // Si moins de 3 spés détectées, on met les manquantes à "autre" sans note
+  // Si moins de 3 spés détectées : on vide la note des slots manquants
   for (let i = spes.length; i < 3; i++) {
-    document.getElementById('spe' + (i+1) + '-kind').value = 'autre';
     document.getElementById('spe' + (i+1) + '-note').value = '';
+  }
+  // Avertissement si une spé OCR n'a pas pu être mappée sur les 7 connues
+  if (unmatchedSpes.length > 0) {
+    console.warn('Spés OCR non reconnues parmi les 7 :', unmatchedSpes);
   }
 
   // 3) Renseigner le tronc commun
@@ -479,7 +484,7 @@ function autoFillFromOCR(rawText) {
   onSpeChange();
   recompute();
 
-  return { count, spes, tc };
+  return { count, spes, tc, unmatchedSpes };
 }
 
 // ===== HELPERS =====
