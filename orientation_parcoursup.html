@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mon Orientation Parcoursup</title>
+<!--
+============================================================================
+ OUTIL : Mon Orientation Parcoursup
+ USAGE : Outil interactif pour qu'un élève visualise les formations
+         auxquelles d'anciens élèves au profil identique ont été admis.
+ DONNÉES : Constante JS HISTORIQUE en tête de script.
+ ADMIN  : Mot de passe par défaut = "stanislas2025"
+          (modifiable dans la constante ADMIN_PASSWORD ci-dessous).
+ CSV ADMIN — colonnes attendues, séparateur virgule, encodage UTF-8 :
+   annee, nom, prenom, classe, specialite_1, note_spe_1,
+   specialite_2, note_spe_2, fr_moy,
+   formation_1, formation_2, ... formation_N
+ SPÉCIALITÉS — orthographe imposée :
+   HIST.GEO.GEOPOL.S.P.
+   HUMAN.LITTER.PHILO.
+   MATHEMATIQUES
+   NUMERIQUE SC.INFORM.
+   PHYSIQUE-CHIMIE
+   SC. ECONO.& SOCIALES
+   SCIENCES VIE & TERRE
+============================================================================
+-->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --bleu: #1a3a5c;
+    --bleu-clair: #2e5a85;
+    --texte: #333333;
+    --bordure: #d8dce2;
+    --fond-doux: #f5f7fa;
+    --orange: #e08a3c;
+    --orange-fond: #fdf3e6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 0;
+    color: var(--texte);
+    background: #fff;
+    line-height: 1.45;
+  }
+  header {
+    background: var(--bleu);
+    color: #fff;
+    padding: 18px 28px;
+  }
+  header h1 { margin: 0; font-size: 1.4rem; font-weight: 600; }
+  header p  { margin: 4px 0 0; font-size: 0.85rem; opacity: 0.85; }
+
+  main {
+    display: flex;
+    min-height: calc(100vh - 130px);
+  }
+  .col-profil {
+    flex: 0 0 40%;
+    padding: 24px 28px;
+    border-right: 1px solid var(--bordure);
+    background: var(--fond-doux);
+  }
+  .col-formations {
+    flex: 1;
+    padding: 24px 28px;
+  }
+
+  h2 {
+    font-size: 1.05rem;
+    color: var(--bleu);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 18px;
+  }
+
+  .champ { margin-bottom: 16px; }
+  .champ label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--bleu);
+  }
+  select, input[type=range] {
+    width: 100%;
+    font-family: inherit;
+  }
+  select {
+    padding: 8px 10px;
+    border: 1px solid var(--bordure);
+    border-radius: 6px;
+    background: #fff;
+    font-size: 0.9rem;
+  }
+  input[type=range] {
+    accent-color: var(--bleu);
+  }
+  .slider-val {
+    font-weight: 600;
+    color: var(--bleu);
+    margin-left: 8px;
+  }
+
+  .compteur {
+    margin-top: 22px;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid var(--bordure);
+    border-radius: 8px;
+    text-align: center;
+  }
+  .compteur .gros {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--bleu);
+    display: block;
+  }
+  .compteur .lib { font-size: 0.85rem; }
+
+  .alerte-vide {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--orange-fond);
+    border: 1px solid var(--orange);
+    border-radius: 6px;
+    color: #7a4818;
+    font-size: 0.85rem;
+    display: none;
+  }
+
+  .filtres {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+  .filtres .champ { flex: 1 1 200px; margin: 0; }
+
+  .chart-wrap {
+    background: #fff;
+    border: 1px solid var(--bordure);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 20px;
+  }
+  .chart-wrap h3 {
+    margin: 0 0 10px;
+    font-size: 0.9rem;
+    color: var(--bleu);
+    font-weight: 600;
+  }
+  .bar-container { position: relative; height: 420px; }
+  .donut-container { position: relative; height: 280px; }
+
+  footer {
+    background: #f0f2f5;
+    padding: 12px 28px;
+    text-align: right;
+    border-top: 1px solid var(--bordure);
+    font-size: 0.8rem;
+    color: #777;
+  }
+  footer button {
+    background: none;
+    border: none;
+    color: #777;
+    cursor: pointer;
+    font-size: 0.8rem;
+    text-decoration: underline;
+  }
+
+  /* Modale admin */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .overlay.actif { display: flex; }
+  .modale {
+    background: #fff;
+    border-radius: 10px;
+    padding: 24px;
+    max-width: 420px;
+    width: 90%;
+  }
+  .modale.large { max-width: 1100px; max-height: 90vh; overflow-y: auto; }
+  .modale h2 { margin-top: 0; }
+  .modale input[type=password], .modale input[type=text] {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--bordure);
+    border-radius: 6px;
+    font-size: 1rem;
+  }
+  .btn {
+    background: var(--bleu);
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    margin-right: 8px;
+    margin-top: 8px;
+  }
+  .btn.secondaire {
+    background: #fff;
+    color: var(--bleu);
+    border: 1px solid var(--bleu);
+  }
+  .btn:hover { background: var(--bleu-clair); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 14px;
+  }
+  th, td {
+    border: 1px solid var(--bordure);
+    padding: 6px 8px;
+    text-align: left;
+  }
+  th { background: var(--bleu); color: #fff; font-weight: 500; }
+  .stats-admin {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 14px 0;
+  }
+  .stat-card {
+    background: var(--fond-doux);
+    border: 1px solid var(--bordure);
+    border-radius: 8px;
+    padding: 12px 18px;
+    flex: 1 1 180px;
+  }
+  .stat-card .gros {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--bleu);
+    display: block;
+  }
+
+  .err-msg {
+    color: #b00020;
+    font-size: 0.85rem;
+    margin-top: 8px;
+  }
+  .ok-msg {
+    color: #2e7d32;
+    font-size: 0.85rem;
+    margin-top: 8px;
+  }
+
+  @media (max-width: 768px) {
+    main { flex-direction: column; }
+    .col-profil { flex: 1 1 auto; border-right: none; border-bottom: 1px solid var(--bordure); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Mon Orientation Parcoursup</h1>
+  <p>Visualise les formations auxquelles d'anciens élèves avec ton profil ont été admis.</p>
+</header>
+
+<main>
+  <!-- ====== ZONE GAUCHE : Profil ====== -->
+  <section class="col-profil">
+    <h2>Mon profil</h2>
+
+    <div class="champ">
+      <label for="spe1">Spécialité 1</label>
+      <select id="spe1"></select>
+    </div>
+
+    <div class="champ">
+      <label for="spe2">Spécialité 2</label>
+      <select id="spe2"></select>
+    </div>
+
+    <div class="champ">
+      <label for="frmoy">Moyenne français <span class="slider-val" id="frmoy_val">0</span></label>
+      <input type="range" id="frmoy" min="0" max="20" step="0.5" value="0">
+    </div>
+
+    <div class="champ">
+      <label for="ns1">Note spécialité 1 <span class="slider-val" id="ns1_val">0</span></label>
+      <input type="range" id="ns1" min="0" max="20" step="0.5" value="0">
+    </div>
+
+    <div class="champ">
+      <label for="ns2">Note spécialité 2 <span class="slider-val" id="ns2_val">0</span></label>
+      <input type="range" id="ns2" min="0" max="20" step="0.5" value="0">
+    </div>
+
+    <div class="compteur">
+      <span class="gros" id="nb_match">0</span>
+      <span class="lib">anciens élèves correspondent à ce profil</span>
+    </div>
+    <div class="alerte-vide" id="alerte_vide">
+      Aucun profil correspondant — essaie d'élargir tes notes ou vérifie tes spécialités.
+    </div>
+    <p style="font-size:0.78rem;color:#777;margin-top:14px;">
+      <strong>Mode exploration actif</strong> tant que les trois sliders sont à 0
+      (matching uniquement sur les spécialités). Bouge un slider pour affiner
+      avec ta note réelle (tolérance ±1 point).
+    </p>
+  </section>
+
+  <!-- ====== ZONE DROITE : Formations ====== -->
+  <section class="col-formations">
+    <h2>Formations obtenues par des élèves avec ton profil</h2>
+
+    <div class="filtres">
+      <div class="champ">
+        <label for="f_filiere">Filière</label>
+        <select id="f_filiere"></select>
+      </div>
+      <div class="champ">
+        <label for="f_soustype">Sous-type</label>
+        <select id="f_soustype"></select>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <h3>Où vont les élèves avec ce profil&nbsp;?</h3>
+      <div class="donut-container"><canvas id="chart_donut"></canvas></div>
+    </div>
+
+    <div class="chart-wrap">
+      <h3>Sous-types les plus fréquents (OUI parmi les profils correspondants)</h3>
+      <div class="bar-container"><canvas id="chart_bar"></canvas></div>
+    </div>
+
+    <div class="chart-wrap">
+      <h3>Établissements par sous-type</h3>
+      <p style="font-size:0.78rem;color:#666;margin:0 0 8px;">
+        Pour chaque sous-type (ex.&nbsp;MPSI, PASS, ECG…) — nombre d'élèves OUI
+        et liste des établissements avec leur décompte.
+      </p>
+      <div style="max-height:480px;overflow:auto;">
+        <table id="tbl_etab">
+          <thead><tr>
+            <th style="width:24%;">Sous-type</th>
+            <th style="width:10%;">Nb OUI</th>
+            <th>Établissements</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <button id="btn_admin_open">Administration</button>
+</footer>
+
+<!-- ============== MODALE LOGIN ADMIN ============== -->
+<div class="overlay" id="ov_login">
+  <div class="modale">
+    <h2>Administration</h2>
+    <p style="font-size:0.85rem;">Saisis le mot de passe pour accéder à la gestion des données.</p>
+    <input type="password" id="adm_pwd" placeholder="Mot de passe">
+    <div id="adm_err" class="err-msg"></div>
+    <div style="margin-top:14px;">
+      <button class="btn" id="btn_adm_valid">Valider</button>
+      <button class="btn secondaire" id="btn_adm_cancel">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============== PANNEAU ADMIN ============== -->
+<div class="overlay" id="ov_panel">
+  <div class="modale large">
+    <h2>Panneau d'administration</h2>
+
+    <div class="stats-admin" id="stats_admin"></div>
+
+    <div style="margin-top:8px;">
+      <label class="btn secondaire" style="display:inline-block;cursor:pointer;">
+        Importer un fichier CSV
+        <input type="file" id="csv_input" accept=".csv,text/csv" style="display:none;">
+      </label>
+      <button class="btn secondaire" id="btn_export_js">Exporter le code JS mis à jour</button>
+      <button class="btn" id="btn_panel_close">Fermer</button>
+    </div>
+    <div id="adm_msg"></div>
+
+    <h3 style="margin-top:18px;color:var(--bleu);">Données actuelles ( <span id="nb_total"></span> élèves )</h3>
+    <div style="max-height:50vh;overflow:auto;">
+      <table id="tbl_admin">
+        <thead><tr>
+          <th>Année</th><th>Nom</th><th>Prénom</th><th>Classe</th>
+          <th>Spé 1</th><th>Note 1</th><th>Spé 2</th><th>Note 2</th>
+          <th>Fr moy</th><th>Nb OUI</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   CONFIGURATION
+   ========================================================================= */
+const ADMIN_PASSWORD = "stanislas2025";
+
+const SPECIALITES = [
+  "HIST.GEO.GEOPOL.S.P.",
+  "HUMAN.LITTER.PHILO.",
+  "MATHEMATIQUES",
+  "NUMERIQUE SC.INFORM.",
+  "PHYSIQUE-CHIMIE",
+  "SC. ECONO.& SOCIALES",
+  "SCIENCES VIE & TERRE"
+];
+
+/* =========================================================================
+   DONNÉES — 5 élèves fictifs représentatifs
+   Mettre à jour via le panneau Administration > Exporter JS.
+   ========================================================================= */
+let HISTORIQUE = [
+  {
+    annee: 2024,
+    nom: "Dupont",
+    prenom: "Marie",
+    classe: "Terminale 2",
+    specialite_1: "PHYSIQUE-CHIMIE",
+    note_spe_1: 16.5,
+    specialite_2: "MATHEMATIQUES",
+    note_spe_2: 14.0,
+    fr_moy: 15.0,
+    formations: [
+      "CPGE > MPSI (avec internat) > Lycée Stanislas (Cannes - 06)",
+      "CPGE > PCSI (sans internat) > Lycée Masséna (Nice - 06)",
+      "École d'ingénieurs > Bac Général > INSA Lyon (Villeurbanne - 69)",
+      "Licence > Sciences - technologies - santé – Sciences de la vie > Université Côte d'Azur (Nice - 06)"
+    ]
+  },
+  {
+    annee: 2024,
+    nom: "Martin",
+    prenom: "Léa",
+    classe: "Terminale 4",
+    specialite_1: "HIST.GEO.GEOPOL.S.P.",
+    note_spe_1: 14.0,
+    specialite_2: "SC. ECONO.& SOCIALES",
+    note_spe_2: 13.5,
+    fr_moy: 14.5,
+    formations: [
+      "Licence > Droit-économie-gestion – Droit > Université Côte d'Azur (Nice - 06)",
+      "Licence > Droit-économie-gestion – Droit > Université Paris Panthéon Assas (Paris 5e - 75)",
+      "IEP > Sciences Humaines et Sociales > Sciences Po Reims (51)",
+      "CPGE > B/L Lettres et sciences sociales (avec internat) > Lycée Stanislas (Cannes - 06)"
+    ]
+  },
+  {
+    annee: 2023,
+    nom: "Bernard",
+    prenom: "Hugo",
+    classe: "Terminale 5",
+    specialite_1: "MATHEMATIQUES",
+    note_spe_1: 15.0,
+    specialite_2: "SC. ECONO.& SOCIALES",
+    note_spe_2: 14.0,
+    fr_moy: 13.0,
+    formations: [
+      "CPGE > ECG - Mathématiques approfondies + ESH (avec internat) > Lycée Stanislas (Cannes - 06)",
+      "CPGE > ECG - Mathématiques appliquées + ESH (avec internat) > Lycée International de Valbonne (06)",
+      "École de commerce > Programme Grande Ecole > ESSCA School of Management (Aix-en-Provence - 13)",
+      "BUT > Gestion des entreprises et des administrations > I.U.T Nice-Côte d'Azur (06)"
+    ]
+  },
+  {
+    annee: 2025,
+    nom: "Petit",
+    prenom: "Camille",
+    classe: "Terminale 6",
+    specialite_1: "PHYSIQUE-CHIMIE",
+    note_spe_1: 17.0,
+    specialite_2: "SCIENCES VIE & TERRE",
+    note_spe_2: 16.0,
+    fr_moy: 14.0,
+    formations: [
+      "Licence > Sciences - technologies - santé – PASS > Université Côte d'Azur (Nice - 06)",
+      "Licence > Sciences - technologies - santé – PASS > Université Claude Bernard Lyon 1 (Villeurbanne - 69)",
+      "École d'ingénieurs > Bac Général > INSA Lyon (Villeurbanne - 69)",
+      "CPGE > BCPST (avec internat) > Lycée Thiers (Marseille - 13)"
+    ]
+  },
+  {
+    annee: 2025,
+    nom: "Roux",
+    prenom: "Théo",
+    classe: "Terminale 3",
+    specialite_1: "HUMAN.LITTER.PHILO.",
+    note_spe_1: 13.0,
+    specialite_2: "HIST.GEO.GEOPOL.S.P.",
+    note_spe_2: 14.0,
+    fr_moy: 16.0,
+    formations: [
+      "CPGE > Lettres (avec internat) > Lycée Masséna (Nice - 06)",
+      "Licence > Lettres – Lettres modernes > Université Côte d'Azur (Nice - 06)",
+      "IEP > Sciences Humaines et Sociales > Sciences Po Toulouse (31)",
+      "CPES > Humanités, Lettres et Sociétés > Université Côte d'Azur / Lycée Stanislas (Nice - 06)"
+    ]
+  }
+];
+
+/* =========================================================================
+   UTILITAIRES
+   ========================================================================= */
+function parseFormation(f) {
+  const parts = (f || "").split(" > ").map(s => s.trim());
+  // Sous-type synthétique : on retire toute mention "(avec internat)" / "(sans internat)"
+  let sous = parts[1] || "";
+  sous = sous.replace(/\s*\((?:avec|sans) internat\)\s*/gi, "").trim();
+  return {
+    full: f,
+    filiere: parts[0] || "",
+    soustype: sous,
+    intitule: parts[2] || ""
+  };
+}
+
+function bucketFiliere(filiere) {
+  // Buckets pour le filtre filière
+  if (filiere === "CPGE") return "CPGE";
+  if (filiere === "BTS") return "BTS";
+  if (filiere === "BUT") return "BUT";
+  if (filiere === "Licence") return "Licence";
+  return "Autre";
+}
+
+const FILIERES_PRINCIPALES = ["CPGE", "BTS", "BUT", "Licence", "Autre"];
+
+/* =========================================================================
+   INITIALISATION DOM — listes déroulantes
+   ========================================================================= */
+function popSpeSelect(id, defaultIdx) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = "";
+  SPECIALITES.forEach((s, i) => {
+    const o = document.createElement("option");
+    o.value = s; o.textContent = s;
+    if (i === defaultIdx) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+popSpeSelect("spe1", 4); // PHYSIQUE-CHIMIE par défaut
+popSpeSelect("spe2", 2); // MATHEMATIQUES par défaut
+
+function popFiliereSelect() {
+  const sel = document.getElementById("f_filiere");
+  sel.innerHTML = '<option value="__all__">Toutes</option>';
+  FILIERES_PRINCIPALES.forEach(f => {
+    const o = document.createElement("option");
+    o.value = f; o.textContent = f;
+    sel.appendChild(o);
+  });
+}
+popFiliereSelect();
+
+function popSousTypeSelect(profilFormations) {
+  const sel = document.getElementById("f_soustype");
+  const fil = document.getElementById("f_filiere").value;
+  const opts = new Set();
+  profilFormations.forEach(f => {
+    const p = parseFormation(f);
+    if (fil === "__all__" || bucketFiliere(p.filiere) === fil) {
+      if (p.soustype) opts.add(p.soustype);
+    }
+  });
+  const prev = sel.value;
+  sel.innerHTML = '<option value="__all__">Tous</option>';
+  Array.from(opts).sort().forEach(s => {
+    const o = document.createElement("option");
+    o.value = s; o.textContent = s.length > 80 ? s.slice(0, 78)+"…" : s;
+    sel.appendChild(o);
+  });
+  if (Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+}
+
+
+/* =========================================================================
+   MATCHING — logique principale
+   ========================================================================= */
+function getProfile() {
+  return {
+    spe1: document.getElementById("spe1").value,
+    spe2: document.getElementById("spe2").value,
+    fr:   parseFloat(document.getElementById("frmoy").value),
+    ns1:  parseFloat(document.getElementById("ns1").value),
+    ns2:  parseFloat(document.getElementById("ns2").value)
+  };
+}
+
+function matchEleves(prof) {
+  const speSet = new Set([prof.spe1, prof.spe2]);
+  if (speSet.size < 2) return []; // mêmes spé : impossible
+  const tousZero = (prof.fr === 0 && prof.ns1 === 0 && prof.ns2 === 0);
+
+  return HISTORIQUE.filter(e => {
+    const eleveSpes = new Set([e.specialite_1, e.specialite_2]);
+    if (eleveSpes.size !== 2) return false;
+    // Spé identiques (ordre indifférent)
+    if (!speSet.has(e.specialite_1) || !speSet.has(e.specialite_2)) return false;
+    if (tousZero) return true;
+    // Notes ±1
+    const inRange = (v, c) => (typeof v === "number" && !isNaN(v))
+                              && Math.abs(v - c) <= 1;
+    if (!inRange(e.fr_moy, prof.fr))      return false;
+    // Pour les notes spé, comparer la note de l'élève sur la spé correspondante
+    // de la saisie (spe1 saisie ↔ note saisie ns1)
+    const noteEleveSpe1Saisie = (e.specialite_1 === prof.spe1) ? e.note_spe_1 : e.note_spe_2;
+    const noteEleveSpe2Saisie = (e.specialite_1 === prof.spe2) ? e.note_spe_1 : e.note_spe_2;
+    if (!inRange(noteEleveSpe1Saisie, prof.ns1)) return false;
+    if (!inRange(noteEleveSpe2Saisie, prof.ns2)) return false;
+    return true;
+  });
+}
+
+/* =========================================================================
+   GRAPHIQUES
+   ========================================================================= */
+let chartBar = null;
+let chartDonut = null;
+
+function renderBar(data) {
+  // data : [{label, count, total, pct}]
+  const ctx = document.getElementById("chart_bar").getContext("2d");
+  if (chartBar) chartBar.destroy();
+  if (data.length === 0) {
+    chartBar = new Chart(ctx, {
+      type: "bar", data: { labels: [], datasets: [] },
+      options: { plugins:{title:{display:true,text:"Aucune formation à afficher"}} }
+    });
+    return;
+  }
+  const max = data[0].count || 1;
+  const colors = data.map(d => {
+    const r = d.count / max; // 0 → 1
+    // dégradé jaune (#f3c623) → vert (#2e9c5a)
+    const lerp = (a,b) => Math.round(a + (b-a)*r);
+    const cR = lerp(0xf3, 0x2e), cG = lerp(0xc6, 0x9c), cB = lerp(0x23, 0x5a);
+    return `rgb(${cR},${cG},${cB})`;
+  });
+  chartBar = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: data.map(d => d.label.length > 90 ? d.label.slice(0,87)+"…" : d.label),
+      datasets: [{
+        data: data.map(d => d.count),
+        backgroundColor: colors,
+        borderWidth: 0
+      }]
+    },
+    options: {
+      indexAxis: "y",
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const d = data[ctx.dataIndex];
+              return `${d.count} élève(s) sur ${d.total} avec ce profil ont eu un OUI dans ce sous-type (${d.pct}%)`;
+            },
+            title: ctx => data[ctx[0].dataIndex].label
+          }
+        }
+      },
+      scales: {
+        x: { beginAtZero: true, ticks: { precision: 0 } },
+        y: { ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+function renderDonut(buckets) {
+  // buckets : { CPGE: n, ... }
+  const ctx = document.getElementById("chart_donut").getContext("2d");
+  if (chartDonut) chartDonut.destroy();
+  const labels = Object.keys(buckets);
+  const data = Object.values(buckets);
+  const palette = ["#1a3a5c","#2e9c5a","#f3c623","#e08a3c","#7a4818","#6b6b6b"];
+  chartDonut = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: labels.map((_,i)=>palette[i % palette.length]) }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "right" },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const total = data.reduce((a,b)=>a+b,0) || 1;
+              const v = data[ctx.dataIndex];
+              const pct = ((v/total)*100).toFixed(1);
+              return `${ctx.label}: ${v} OUI (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+/* =========================================================================
+   PIPELINE PRINCIPAL — exécuté à chaque interaction
+   ========================================================================= */
+function refresh() {
+  const prof = getProfile();
+  const matched = matchEleves(prof);
+  document.getElementById("nb_match").textContent = matched.length;
+  document.getElementById("alerte_vide").style.display = matched.length === 0 ? "block" : "none";
+
+  // Récupérer toutes les formations OUI du groupe
+  const allForm = [];
+  matched.forEach(e => (e.formations || []).forEach(f => allForm.push(f)));
+
+  // Repeupler le filtre sous-type selon filière sélectionnée
+  popSousTypeSelect(allForm);
+
+  const filFil = document.getElementById("f_filiere").value;
+  const filSous = document.getElementById("f_soustype").value;
+
+  const total = matched.length;
+
+  // Agrégations
+  // - bucketsDonut : OUI dédupliqués par élève par filière (1 élève compte 1× par filière)
+  // - sousTypeCount : nb élèves distincts ayant eu ≥1 OUI dans ce sous-type
+  // - sousTypeEtab : pour chaque sous-type → Map(établissement -> nb élèves distincts)
+  const bucketsDonut = {};
+  const sousTypeCount = {};
+  const sousTypeEtab = {};
+
+  matched.forEach(e => {
+    const filieresVues = new Set(); // filières comptées pour cet élève (donut)
+    const sousVus = new Set();      // sous-types comptés pour cet élève
+    const etabPourSous = {};        // sous-type -> Set(établissement) pour cet élève
+
+    (e.formations || []).forEach(f => {
+      const p = parseFormation(f);
+      const b = bucketFiliere(p.filiere);
+      // Filtres utilisateur
+      if (filFil !== "__all__" && b !== filFil) return;
+      if (filSous !== "__all__" && p.soustype !== filSous) return;
+
+      // Donut : 1 élève compte 1 fois par filière
+      if (!filieresVues.has(b)) {
+        filieresVues.add(b);
+        bucketsDonut[b] = (bucketsDonut[b] || 0) + 1;
+      }
+      // Sous-type : 1 élève compte 1 fois par sous-type
+      if (!sousVus.has(p.soustype)) {
+        sousVus.add(p.soustype);
+        sousTypeCount[p.soustype] = (sousTypeCount[p.soustype] || 0) + 1;
+      }
+      // Établissements : on garde la liste par sous-type, dédupliquée par élève
+      if (!etabPourSous[p.soustype]) etabPourSous[p.soustype] = new Set();
+      etabPourSous[p.soustype].add(p.intitule);
+    });
+
+    // Reverser les établissements dans la map globale
+    for (const [s, etabs] of Object.entries(etabPourSous)) {
+      if (!sousTypeEtab[s]) sousTypeEtab[s] = {};
+      etabs.forEach(et => {
+        sousTypeEtab[s][et] = (sousTypeEtab[s][et] || 0) + 1;
+      });
+    }
+  });
+
+  // Bar chart : sous-types triés par fréquence
+  const arrSous = Object.entries(sousTypeCount).map(([s, n]) => ({
+    label: s,
+    count: n,
+    total,
+    pct: total ? ((n/total)*100).toFixed(0) : 0
+  })).sort((a,b) => b.count - a.count).slice(0, 25);
+
+  renderDonut(bucketsDonut);
+  renderBar(arrSous);
+  renderEtabTable(sousTypeEtab, sousTypeCount);
+}
+
+function renderEtabTable(sousTypeEtab, sousTypeCount) {
+  const tbody = document.querySelector("#tbl_etab tbody");
+  tbody.innerHTML = "";
+  const lignes = Object.keys(sousTypeEtab)
+    .sort((a,b) => (sousTypeCount[b]||0) - (sousTypeCount[a]||0));
+  if (lignes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#888;">Aucune donnée pour ce filtre.</td></tr>';
+    return;
+  }
+  lignes.forEach(s => {
+    const etabs = sousTypeEtab[s];
+    const items = Object.entries(etabs)
+      .sort((a,b) => b[1] - a[1])
+      .map(([et, n]) => `<li>${escapeHtml(et)} <span style="color:#777;">(${n})</span></li>`)
+      .join("");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(s) || "—"}</strong></td>
+      <td>${sousTypeCount[s] || 0}</td>
+      <td><ul style="margin:0;padding-left:18px;">${items}</ul></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* =========================================================================
+   ÉVÉNEMENTS
+   ========================================================================= */
+function bindLiveSlider(id, valId) {
+  const s = document.getElementById(id);
+  const v = document.getElementById(valId);
+  s.addEventListener("input", () => { v.textContent = s.value; refresh(); });
+}
+bindLiveSlider("frmoy", "frmoy_val");
+bindLiveSlider("ns1",   "ns1_val");
+bindLiveSlider("ns2",   "ns2_val");
+
+["spe1","spe2","f_filiere","f_soustype"].forEach(id => {
+  document.getElementById(id).addEventListener("change", refresh);
+});
+
+/* =========================================================================
+   ADMINISTRATION
+   ========================================================================= */
+const ovLogin = document.getElementById("ov_login");
+const ovPanel = document.getElementById("ov_panel");
+
+document.getElementById("btn_admin_open").addEventListener("click", () => {
+  document.getElementById("adm_pwd").value = "";
+  document.getElementById("adm_err").textContent = "";
+  ovLogin.classList.add("actif");
+  document.getElementById("adm_pwd").focus();
+});
+document.getElementById("btn_adm_cancel").addEventListener("click", () => {
+  ovLogin.classList.remove("actif");
+});
+document.getElementById("btn_adm_valid").addEventListener("click", tryLogin);
+document.getElementById("adm_pwd").addEventListener("keydown", e => {
+  if (e.key === "Enter") tryLogin();
+});
+
+function tryLogin() {
+  const pwd = document.getElementById("adm_pwd").value;
+  if (pwd === ADMIN_PASSWORD) {
+    sessionStorage.setItem("adm_ok", "1");
+    ovLogin.classList.remove("actif");
+    openPanel();
+  } else {
+    document.getElementById("adm_err").textContent = "Mot de passe incorrect.";
+  }
+}
+
+document.getElementById("btn_panel_close").addEventListener("click", () => {
+  ovPanel.classList.remove("actif");
+  sessionStorage.removeItem("adm_ok");
+});
+
+function openPanel() {
+  renderAdminTable();
+  ovPanel.classList.add("actif");
+  document.getElementById("adm_msg").innerHTML = "";
+}
+
+function renderAdminTable() {
+  const tbody = document.querySelector("#tbl_admin tbody");
+  tbody.innerHTML = "";
+  HISTORIQUE.forEach(e => {
+    const tr = document.createElement("tr");
+    const oui = (e.formations || []).length;
+    tr.innerHTML = `
+      <td>${e.annee ?? ""}</td>
+      <td>${escapeHtml(e.nom ?? "")}</td>
+      <td>${escapeHtml(e.prenom ?? "")}</td>
+      <td>${escapeHtml(e.classe ?? "")}</td>
+      <td>${escapeHtml(e.specialite_1 ?? "")}</td>
+      <td>${e.note_spe_1 ?? ""}</td>
+      <td>${escapeHtml(e.specialite_2 ?? "")}</td>
+      <td>${e.note_spe_2 ?? ""}</td>
+      <td>${e.fr_moy ?? ""}</td>
+      <td>${oui}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById("nb_total").textContent = HISTORIQUE.length;
+
+  // stats
+  const annees = new Set(HISTORIQUE.map(e => e.annee));
+  const formations = new Set();
+  HISTORIQUE.forEach(e => (e.formations||[]).forEach(f => formations.add(f)));
+  const stats = document.getElementById("stats_admin");
+  stats.innerHTML = `
+    <div class="stat-card"><span class="gros">${HISTORIQUE.length}</span>élèves</div>
+    <div class="stat-card"><span class="gros">${[...annees].sort().join(", ")||"–"}</span>années couvertes</div>
+    <div class="stat-card"><span class="gros">${formations.size}</span>formations distinctes</div>
+  `;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[c]));
+}
+
+/* ---- Import CSV ---- */
+document.getElementById("csv_input").addEventListener("change", evt => {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const msg = document.getElementById("adm_msg");
+  msg.innerHTML = "";
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: results => {
+      try {
+        const newHist = csvRowsToHistorique(results.data);
+        HISTORIQUE = newHist;
+        renderAdminTable();
+        refresh();
+        msg.innerHTML = `<div class="ok-msg">${newHist.length} élèves importés. Pense à exporter le code JS pour publier.</div>`;
+      } catch (err) {
+        msg.innerHTML = `<div class="err-msg">Erreur d'import : ${escapeHtml(err.message)}</div>`;
+      }
+    },
+    error: err => {
+      msg.innerHTML = `<div class="err-msg">Échec parsing CSV : ${escapeHtml(err.message)}</div>`;
+    }
+  });
+  evt.target.value = ""; // reset
+});
+
+function csvRowsToHistorique(rows) {
+  if (!rows || !rows.length) throw new Error("CSV vide.");
+  // Normaliser chaque ligne : clés en minuscules + trim + retrait BOM éventuel
+  const norm = (k) => String(k || "")
+                       .replace(/^﻿/, "")
+                       .trim()
+                       .toLowerCase();
+  const normalizedRows = rows.map(row => {
+    const o = {};
+    for (const k of Object.keys(row)) o[norm(k)] = row[k];
+    return o;
+  });
+  const keys = Object.keys(normalizedRows[0]);
+  const requis = ["annee","nom","prenom","classe","specialite_1","note_spe_1",
+                  "specialite_2","note_spe_2","fr_moy"];
+  for (const r of requis) {
+    if (!keys.includes(r)) throw new Error(`Colonne manquante : ${r}`);
+  }
+  const formationKeys = keys.filter(k => /^formation_\d+$/.test(k))
+                            .sort((a,b) => +a.split("_")[1] - +b.split("_")[1]);
+
+  return normalizedRows.map(row => {
+    const formations = formationKeys
+      .map(k => (row[k] || "").trim())
+      .filter(v => v.length > 0);
+    const num = v => {
+      if (v === "" || v == null) return null;
+      const n = parseFloat(String(v).replace(",", "."));
+      return isNaN(n) ? null : n;
+    };
+    return {
+      annee: parseInt(row.annee, 10) || null,
+      nom: (row.nom || "").trim(),
+      prenom: (row.prenom || "").trim(),
+      classe: (row.classe || "").trim(),
+      specialite_1: (row.specialite_1 || "").trim(),
+      note_spe_1: num(row.note_spe_1),
+      specialite_2: (row.specialite_2 || "").trim(),
+      note_spe_2: num(row.note_spe_2),
+      fr_moy: num(row.fr_moy),
+      formations
+    };
+  });
+}
+
+/* ---- Export JS ---- */
+document.getElementById("btn_export_js").addEventListener("click", () => {
+  const js = "let HISTORIQUE = " + JSON.stringify(HISTORIQUE, null, 2) + ";\n";
+  const blob = new Blob([js], { type: "text/javascript;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "historique.js";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  document.getElementById("adm_msg").innerHTML =
+    `<div class="ok-msg">Fichier <code>historique.js</code> téléchargé. Remplace le bloc <code>let HISTORIQUE = […];</code> du HTML par son contenu, puis publie.</div>`;
+});
+
+/* =========================================================================
+   PREMIÈRE EXÉCUTION
+   ========================================================================= */
+refresh();
+</script>
+
+</body>
+</html>
